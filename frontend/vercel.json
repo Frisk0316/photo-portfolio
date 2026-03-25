@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://determined-enthusiasm-production-22d1.up.railway.app/api/:path*"
+    }
+  ]
+}
