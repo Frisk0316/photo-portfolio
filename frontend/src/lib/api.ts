@@ -2,6 +2,11 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === 'l
   ? 'http://localhost:4000'
   : '';
 
+// Long-running requests (upload process) go directly to Railway to avoid Vercel proxy timeout
+const DIRECT_API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:4000'
+  : 'https://determined-enthusiasm-production-22d1.up.railway.app';
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('admin_token');
@@ -165,9 +170,22 @@ export const upload = {
     }
     return res.json();
   },
-  process: (albumId: number, albumSlug: string, key: string, fileName: string) =>
-    request<{ data: Photo }>('/api/upload/process', {
+  process: async (albumId: number, albumSlug: string, key: string, fileName: string): Promise<{ data: Photo }> => {
+    const token = getToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${DIRECT_API_URL}/api/upload/process`, {
       method: 'POST',
+      headers,
       body: JSON.stringify({ albumId, albumSlug, key, fileName }),
-    }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    return res.json();
+  },
 };
