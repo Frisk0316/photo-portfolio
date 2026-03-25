@@ -9,6 +9,7 @@ function getClient() {
     client = new S3Client({
       region: 'auto',
       endpoint: config.r2.endpoint,
+      forcePathStyle: true,
       credentials: {
         accessKeyId: config.r2.accessKeyId,
         secretAccessKey: config.r2.secretAccessKey,
