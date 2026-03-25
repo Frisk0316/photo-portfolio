@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { upload as uploadApi } from '@/lib/api';
+import { processImage, classifyAspectRatio } from '@/lib/image-processor';
 import type { Photo } from '@/lib/api';
 
 interface UploadFile {
   file: File;
   preview: string;
-  status: 'pending' | 'uploading' | 'done' | 'error';
+  status: 'pending' | 'processing' | 'uploading' | 'done' | 'error';
   progress: number;
+  statusText?: string;
   error?: string;
   result?: Photo;
 }
@@ -23,6 +25,12 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [workerUrl, setWorkerUrl] = useState<string | null>(null);
+
+  // Fetch worker URL once on mount
+  useEffect(() => {
+    uploadApi.getWorkerUrl().then(({ data }) => setWorkerUrl(data.workerUrl)).catch(() => {});
+  }, []);
 
   const addFiles = useCallback((incoming: File[]) => {
     const jpgs = incoming.filter((f) => /\.(jpe?g)$/i.test(f.name));
@@ -45,46 +53,71 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
     if (e.target.files) addFiles(Array.from(e.target.files));
   }
 
+  function updateFile(file: File, updates: Partial<UploadFile>) {
+    setFiles((prev) => prev.map((f) => (f.file === file ? { ...f, ...updates } : f)));
+  }
+
   async function uploadAll() {
     const pending = files.filter((f) => f.status === 'pending');
-    if (!pending.length) return;
+    if (!pending.length || !workerUrl) return;
     setUploading(true);
 
     const results: Photo[] = [];
+    const publicBaseUrl = `https://photos.ospreay-photo.com`;
 
     for (const item of pending) {
-      setFiles((prev) => prev.map((f) =>
-        f.file === item.file ? { ...f, status: 'uploading', progress: 5 } : f
-      ));
-
       try {
-        // Step 1: Get Worker URL + R2 key from backend (small JSON, through Vercel rewrite)
-        const { data: presignData } = await uploadApi.presign(
-          albumSlug, item.file.name, item.file.type || 'image/jpeg'
-        );
+        // Step 1: Process image in browser
+        updateFile(item.file, { status: 'processing', progress: 5, statusText: 'Processing...' });
+        const processed = await processImage(item.file);
 
-        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 10 } : f));
+        // Step 2: Upload all variants to R2 via Worker
+        updateFile(item.file, { status: 'uploading', progress: 15, statusText: 'Uploading...' });
 
-        // Step 2: Upload file to Cloudflare Worker which writes to R2 natively
-        await uploadApi.putToWorker(presignData.workerUrl, presignData.key, item.file);
+        const baseName = item.file.name.replace(/\.[^.]+$/, '');
+        const prefix = `albums/${albumSlug}`;
+        const keys = {
+          original: `${prefix}/original/${baseName}.jpg`,
+          thumbnail: `${prefix}/thumbnail/${baseName}.jpg`,
+          medium: `${prefix}/medium/${baseName}.jpg`,
+          webp: `${prefix}/webp/${baseName}.webp`,
+        };
 
-        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 60 } : f));
+        // Upload original (largest file)
+        await uploadApi.putToWorker(workerUrl, keys.original, processed.original, 'image/jpeg');
+        updateFile(item.file, { progress: 40 });
 
-        // Step 3: Tell backend to process the uploaded file (small JSON, through Vercel rewrite)
-        const { data: photo } = await uploadApi.process(
-          albumId, albumSlug, presignData.key, item.file.name
-        );
+        // Upload variants in parallel
+        await Promise.all([
+          uploadApi.putToWorker(workerUrl, keys.thumbnail, processed.thumbnail, 'image/jpeg'),
+          uploadApi.putToWorker(workerUrl, keys.medium, processed.medium, 'image/jpeg'),
+          uploadApi.putToWorker(workerUrl, keys.webp, processed.webp, 'image/webp'),
+        ]);
+        updateFile(item.file, { progress: 80, statusText: 'Saving...' });
+
+        // Step 3: Register in database (lightweight JSON, through Vercel rewrite)
+        const { data: photo } = await uploadApi.register({
+          albumId,
+          fileName: item.file.name,
+          width: processed.meta.originalWidth,
+          height: processed.meta.originalHeight,
+          aspectRatio: processed.meta.aspectRatio,
+          aspectCategory: classifyAspectRatio(processed.meta.originalWidth, processed.meta.originalHeight),
+          blurHash: processed.meta.blurHash,
+          urlOriginal: `${publicBaseUrl}/${keys.original}`,
+          urlThumbnail: `${publicBaseUrl}/${keys.thumbnail}`,
+          urlMedium: `${publicBaseUrl}/${keys.medium}`,
+          urlWebp: `${publicBaseUrl}/${keys.webp}`,
+          fileSize: processed.meta.fileSize,
+        });
 
         results.push(photo);
-        setFiles((prev) => prev.map((f) =>
-          f.file === item.file ? { ...f, status: 'done', progress: 100, result: photo } : f
-        ));
+        updateFile(item.file, { status: 'done', progress: 100, result: photo });
       } catch (err) {
-        setFiles((prev) => prev.map((f) =>
-          f.file === item.file
-            ? { ...f, status: 'error', error: err instanceof Error ? err.message : 'Upload failed' }
-            : f
-        ));
+        updateFile(item.file, {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Upload failed',
+        });
       }
     }
 
@@ -128,10 +161,15 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
               <img src={f.preview} alt="" className="w-10 h-10 object-cover rounded shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs truncate mb-1" style={{ fontFamily: 'var(--font-dm-mono)' }}>{f.file.name}</p>
-                {f.status === 'uploading' && (
-                  <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
-                    <div className="h-full bg-white/60 transition-all" style={{ width: `${f.progress}%` }} />
-                  </div>
+                {(f.status === 'processing' || f.status === 'uploading') && (
+                  <>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
+                      <div className="h-full bg-white/60 transition-all" style={{ width: `${f.progress}%` }} />
+                    </div>
+                    {f.statusText && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>{f.statusText}</p>
+                    )}
+                  </>
                 )}
                 {f.status === 'error' && (
                   <p className="text-xs text-red-400">{f.error}</p>
@@ -140,10 +178,10 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
               <span className={`text-xs ${
                 f.status === 'done' ? 'text-green-400' :
                 f.status === 'error' ? 'text-red-400' :
-                f.status === 'uploading' ? 'text-white/40' :
+                (f.status === 'processing' || f.status === 'uploading') ? 'text-white/40' :
                 'text-white/25'
               }`}>
-                {f.status === 'done' ? '✓' : f.status === 'error' ? '✗' : f.status === 'uploading' ? '…' : '○'}
+                {f.status === 'done' ? '✓' : f.status === 'error' ? '✗' : (f.status === 'processing' || f.status === 'uploading') ? '…' : '○'}
               </span>
             </div>
           ))}
@@ -153,7 +191,7 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
       {pendingCount > 0 && (
         <button
           onClick={uploadAll}
-          disabled={uploading}
+          disabled={uploading || !workerUrl}
           className="px-5 py-2.5 rounded text-sm font-medium"
           style={{ background: 'var(--accent)', color: '#0a0a0a' }}
         >

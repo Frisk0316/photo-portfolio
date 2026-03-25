@@ -2,10 +2,6 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === 'l
   ? 'http://localhost:4000'
   : '';
 
-// Long-running requests (upload process) go directly to Railway to avoid Vercel proxy timeout
-const DIRECT_API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-  ? 'http://localhost:4000'
-  : 'https://determined-enthusiasm-production-22d1.up.railway.app';
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -145,24 +141,21 @@ export const photos = {
     request<{ data: { updated: number } }>(`/api/albums/${albumId}/photos/reorder`, { method: 'PUT', body: JSON.stringify({ items }) }),
 };
 
-// Upload — presign & process go through Vercel rewrite (small JSON),
-// the large file goes to the Cloudflare Worker which writes to R2 natively.
+// Upload — all R2 writes go through the Cloudflare Worker.
+// Backend only handles lightweight DB registration (no image processing).
 export const upload = {
-  presign: (albumSlug: string, fileName: string, contentType: string) =>
-    request<{ data: { workerUrl: string; key: string } }>('/api/upload/presign', {
-      method: 'POST',
-      body: JSON.stringify({ albumSlug, fileName, contentType }),
-    }),
-  putToWorker: async (workerUrl: string, key: string, file: File) => {
+  getWorkerUrl: () =>
+    request<{ data: { workerUrl: string } }>('/api/upload/worker-url'),
+  putToWorker: async (workerUrl: string, key: string, body: Blob | File, contentType: string) => {
     const token = getToken();
     const res = await fetch(workerUrl, {
       method: 'PUT',
       headers: {
-        'Content-Type': file.type || 'image/jpeg',
+        'Content-Type': contentType,
         'Authorization': `Bearer ${token}`,
         'X-Upload-Key': key,
       },
-      body: file,
+      body,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -170,22 +163,23 @@ export const upload = {
     }
     return res.json();
   },
-  process: async (albumId: number, albumSlug: string, key: string, fileName: string): Promise<{ data: Photo }> => {
-    const token = getToken();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const res = await fetch(`${DIRECT_API_URL}/api/upload/process`, {
+  register: (data: {
+    albumId: number;
+    fileName: string;
+    width: number;
+    height: number;
+    aspectRatio: number;
+    aspectCategory: string;
+    blurHash: string | null;
+    urlOriginal: string;
+    urlThumbnail: string;
+    urlMedium: string;
+    urlWebp: string;
+    fileSize: number;
+    sortOrder?: number;
+  }) =>
+    request<{ data: Photo }>('/api/upload/register', {
       method: 'POST',
-      headers,
-      body: JSON.stringify({ albumId, albumSlug, key, fileName }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-
-    return res.json();
-  },
+      body: JSON.stringify(data),
+    }),
 };

@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import pool from '../services/db.js';
-import { buildPublicUrl } from '../services/r2.js';
-import { processImageBuffer, classifyAspectRatio } from '../services/processor.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
 
@@ -11,97 +9,41 @@ function safeError(err) {
   return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
 }
 
-function isSafeSlug(str) {
-  return typeof str === 'string' && /^[a-zA-Z0-9_-]+$/.test(str);
-}
-
-function isSafeFileName(str) {
-  return typeof str === 'string' && /^[a-zA-Z0-9 ._-]+$/.test(str) && !str.includes('..');
-}
-
-// Upload a buffer to R2 via the Cloudflare Worker (avoids S3 API SSL issues)
-async function uploadViaWorker(key, buffer, contentType) {
+// GET /api/upload/worker-url — return the Cloudflare Worker URL for R2 uploads
+router.get('/worker-url', requireAuth, (req, res) => {
   const workerUrl = config.r2.workerUrl;
-  const res = await fetch(workerUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': contentType,
-      'X-Upload-Key': key,
-      'Authorization': `Bearer ${config.r2.workerSecret}`,
-    },
-    body: buffer,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Worker upload failed (${res.status}): ${text}`);
+  if (!workerUrl) {
+    return res.status(500).json({ error: 'Upload worker URL not configured' });
   }
-  return { key, url: buildPublicUrl(key) };
-}
-
-// POST /api/upload/presign — return the Worker upload URL and R2 key
-router.post('/presign', requireAuth, async (req, res) => {
-  try {
-    const { albumSlug, fileName, contentType } = req.body;
-    if (!albumSlug || !fileName || !contentType) {
-      return res.status(400).json({ error: 'albumSlug, fileName, contentType required' });
-    }
-    if (!isSafeSlug(albumSlug) || !isSafeFileName(fileName)) {
-      return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
-    }
-    const baseName = fileName.replace(/\.[^.]+$/, '');
-    const key = `albums/${albumSlug}/original/${baseName}.jpg`;
-    const workerUrl = config.r2.workerUrl;
-    if (!workerUrl) {
-      return res.status(500).json({ error: 'Upload worker URL not configured' });
-    }
-    res.json({ data: { workerUrl, key } });
-  } catch (err) {
-    res.status(500).json({ error: safeError(err) });
-  }
+  res.json({ data: { workerUrl } });
 });
 
-// POST /api/upload/process — download original from R2, generate variants, upload via Worker
-router.post('/process', requireAuth, async (req, res) => {
+// POST /api/upload/register — register a photo in the database (no image processing)
+router.post('/register', requireAuth, async (req, res) => {
   try {
-    const { albumId, albumSlug, key, fileName, sortOrder = 0 } = req.body;
-    if (!albumId || !albumSlug || !key || !fileName) {
-      return res.status(400).json({ error: 'albumId, albumSlug, key, and fileName required' });
-    }
-    if (!isSafeSlug(albumSlug) || !isSafeFileName(fileName)) {
-      return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
-    }
+    const {
+      albumId, fileName, width, height, aspectRatio, aspectCategory,
+      blurHash, urlOriginal, urlThumbnail, urlMedium, urlWebp,
+      fileSize, sortOrder = 0,
+    } = req.body;
 
-    // Download the original file from R2 via public URL
-    const publicUrl = buildPublicUrl(key);
-    const fetchRes = await fetch(publicUrl);
-    if (!fetchRes.ok) {
-      return res.status(500).json({ error: `Failed to download from R2: ${fetchRes.status}` });
+    if (!albumId || !fileName || !width || !height || !urlOriginal) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
-    const buffer = Buffer.from(await fetchRes.arrayBuffer());
-    const processed = await processImageBuffer(buffer);
-    const baseName = fileName.replace(/\.[^.]+$/, '');
-    const prefix = `albums/${albumSlug}`;
-
-    // Upload all variants via Worker (avoids S3 API)
-    const [origUpload, thumbUpload, mediumUpload, webpUpload] = await Promise.all([
-      uploadViaWorker(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg'),
-      uploadViaWorker(`${prefix}/thumbnail/${baseName}.jpg`, processed.thumbnail.buffer, 'image/jpeg'),
-      uploadViaWorker(`${prefix}/medium/${baseName}.jpg`, processed.medium.buffer, 'image/jpeg'),
-      uploadViaWorker(`${prefix}/webp/${baseName}.webp`, processed.webp.buffer, 'image/webp'),
-    ]);
-
-    const aspectCategory = classifyAspectRatio(processed.meta.originalWidth, processed.meta.originalHeight);
 
     const result = await pool.query(
       `INSERT INTO photos (album_id, file_name, aspect_ratio, aspect_category, width, height,
-        blur_hash, url_original, url_thumbnail, url_medium, url_webp, file_size, sort_order, exif_data)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        blur_hash, url_original, url_thumbnail, url_medium, url_webp, file_size, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT DO NOTHING RETURNING *`,
-      [albumId, fileName, processed.meta.aspectRatio, aspectCategory,
-       processed.meta.originalWidth, processed.meta.originalHeight, processed.meta.blurHash,
-       origUpload.url, thumbUpload.url, mediumUpload.url, webpUpload.url,
-       processed.original.buffer.length, sortOrder, processed.meta.exifData ? JSON.stringify(processed.meta.exifData) : null]
+      [albumId, fileName, aspectRatio, aspectCategory, width, height,
+       blurHash, urlOriginal, urlThumbnail, urlMedium, urlWebp,
+       fileSize, sortOrder]
     );
+
+    if (!result.rows[0]) {
+      return res.status(409).json({ error: 'Photo already exists' });
+    }
 
     // Update album stats
     await pool.query(`
@@ -114,7 +56,7 @@ router.post('/process', requireAuth, async (req, res) => {
 
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
-    console.error('Process error:', err);
+    console.error('Register error:', err);
     res.status(500).json({ error: safeError(err) });
   }
 });
