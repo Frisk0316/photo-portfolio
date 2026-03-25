@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { CSSProperties, useEffect, useRef } from 'react';
 import { decode } from 'blurhash';
 
 interface BlurHashImageProps {
@@ -8,6 +8,7 @@ interface BlurHashImageProps {
   width?: number;
   height?: number;
   className?: string;
+  style?: CSSProperties;
 }
 
 export default function BlurHashImage({
@@ -15,6 +16,7 @@ export default function BlurHashImage({
   width = 32,
   height = 32,
   className = '',
+  style,
 }: BlurHashImageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -40,7 +42,7 @@ export default function BlurHashImage({
       width={width}
       height={height}
       className={className}
-      style={{ imageRendering: 'auto' }}
+      style={{ imageRendering: 'auto', ...style }}
     />
   );
 }
