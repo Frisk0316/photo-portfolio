@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import pool from '../services/db.js';
-import { generatePresignedUrl, downloadFromR2, uploadToR2, buildPublicUrl } from '../services/r2.js';
+import { downloadFromR2, uploadToR2 } from '../services/r2.js';
 import { processImageBuffer, classifyAspectRatio } from '../services/processor.js';
 import { requireAuth } from '../middleware/auth.js';
+import { config } from '../config.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ function isSafeFileName(str) {
   return typeof str === 'string' && /^[a-zA-Z0-9 ._-]+$/.test(str) && !str.includes('..');
 }
 
-// POST /api/upload/presign — generate presigned URL for direct browser → R2 upload
+// POST /api/upload/presign — return the Worker upload URL and R2 key
 router.post('/presign', requireAuth, async (req, res) => {
   try {
     const { albumSlug, fileName, contentType } = req.body;
@@ -30,8 +31,11 @@ router.post('/presign', requireAuth, async (req, res) => {
     }
     const baseName = fileName.replace(/\.[^.]+$/, '');
     const key = `albums/${albumSlug}/original/${baseName}.jpg`;
-    const presignedUrl = await generatePresignedUrl(key, contentType);
-    res.json({ data: { presignedUrl, key } });
+    const workerUrl = config.r2.workerUrl;
+    if (!workerUrl) {
+      return res.status(500).json({ error: 'Upload worker URL not configured' });
+    }
+    res.json({ data: { workerUrl, key } });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
@@ -48,13 +52,12 @@ router.post('/process', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
     }
 
-    // Download the original file from R2 (uploaded by browser via presigned URL)
+    // Download the original file from R2 (uploaded by browser via Worker)
     const buffer = await downloadFromR2(key);
     const processed = await processImageBuffer(buffer);
     const baseName = fileName.replace(/\.[^.]+$/, '');
     const prefix = `albums/${albumSlug}`;
 
-    // Re-upload processed original + generate variants
     const [origUpload, thumbUpload, mediumUpload, webpUpload] = await Promise.all([
       uploadToR2(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg', { variant: 'original' }),
       uploadToR2(`${prefix}/thumbnail/${baseName}.jpg`, processed.thumbnail.buffer, 'image/jpeg', { variant: 'thumbnail' }),

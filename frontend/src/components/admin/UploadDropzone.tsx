@@ -58,25 +58,15 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
       ));
 
       try {
-        // Step 1: Get presigned URL from backend (small JSON, through Vercel rewrite)
+        // Step 1: Get Worker URL + R2 key from backend (small JSON, through Vercel rewrite)
         const { data: presignData } = await uploadApi.presign(
           albumSlug, item.file.name, item.file.type || 'image/jpeg'
         );
 
         setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 10 } : f));
 
-        // Step 2: Upload file directly to R2 via presigned URL (large file, no middleman)
-        const putRes = await fetch(presignData.presignedUrl, {
-          method: 'PUT',
-          body: item.file,
-          headers: {
-            'Content-Type': item.file.type || 'image/jpeg',
-            'Cache-Control': 'public, max-age=31536000, immutable',
-          },
-        });
-        if (!putRes.ok) {
-          throw new Error(`R2 upload failed: ${putRes.status} ${putRes.statusText}`);
-        }
+        // Step 2: Upload file to Cloudflare Worker which writes to R2 natively
+        await uploadApi.putToWorker(presignData.workerUrl, presignData.key, item.file);
 
         setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 60 } : f));
 

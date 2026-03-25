@@ -29,6 +29,7 @@ export const config = {
     secretAccessKey: optional('R2_SECRET_ACCESS_KEY', ''),
     bucketName: optional('R2_BUCKET_NAME', 'photo-portfolio'),
     publicUrl: optional('R2_PUBLIC_URL', ''),
+    workerUrl: optional('R2_WORKER_URL', ''),
     get endpoint() {
       return `https://${this.accountId}.r2.cloudflarestorage.com`;
     },

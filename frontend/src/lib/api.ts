@@ -141,13 +141,30 @@ export const photos = {
 };
 
 // Upload — presign & process go through Vercel rewrite (small JSON),
-// only the large file PUT goes directly to R2 via presigned URL.
+// the large file goes to the Cloudflare Worker which writes to R2 natively.
 export const upload = {
   presign: (albumSlug: string, fileName: string, contentType: string) =>
-    request<{ data: { presignedUrl: string; key: string } }>('/api/upload/presign', {
+    request<{ data: { workerUrl: string; key: string } }>('/api/upload/presign', {
       method: 'POST',
       body: JSON.stringify({ albumSlug, fileName, contentType }),
     }),
+  putToWorker: async (workerUrl: string, key: string, file: File) => {
+    const token = getToken();
+    const res = await fetch(workerUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type || 'image/jpeg',
+        'Authorization': `Bearer ${token}`,
+        'X-Upload-Key': key,
+      },
+      body: file,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Worker upload failed: ${res.status}`);
+    }
+    return res.json();
+  },
   process: (albumId: number, albumSlug: string, key: string, fileName: string) =>
     request<{ data: Photo }>('/api/upload/process', {
       method: 'POST',

@@ -1,0 +1,10 @@
+name = "photo-upload-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[[r2_buckets]]
+binding = "PHOTOS_BUCKET"
+bucket_name = "ospreayphoto"
+
+[vars]
+ALLOWED_ORIGINS = "https://ospreay-photo.com,https://www.ospreay-photo.com,http://localhost:3000"
