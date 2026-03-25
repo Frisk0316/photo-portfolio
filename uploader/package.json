@@ -1,0 +1,15 @@
+{
+  "name": "uploader",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "sharp": "^0.33.4",
+    "blurhash": "^2.0.5",
+    "dotenv": "^16.4.5",
+    "pg": "^8.11.5"
+  }
+}

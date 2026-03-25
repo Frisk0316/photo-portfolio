@@ -1,0 +1,5 @@
+{
+  "name": "photo-portfolio",
+  "private": true,
+  "workspaces": ["frontend", "backend", "uploader", "shared"]
+}
