@@ -4,7 +4,7 @@ import JustifiedGallery from '@/components/gallery/JustifiedGallery';
 import Footer from '@/components/layout/Footer';
 import { formatDate } from '@/lib/utils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.BACKEND_URL || 'http://localhost:4000';
 
 async function getAlbum(slug: string) {
   const res = await fetch(`${API_URL}/api/albums/${slug}`, {
