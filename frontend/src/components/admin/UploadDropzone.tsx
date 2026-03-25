@@ -59,22 +59,12 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
       ));
 
       try {
-        // 1. Get presigned URL
-        const { data: presignData } = await uploadApi.presign(albumSlug, item.file.name, item.file.type || 'image/jpeg');
-
         setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 30 } : f));
 
-        // 2. Upload directly to R2
-        await fetch(presignData.presignedUrl, {
-          method: 'PUT',
-          body: item.file,
-          headers: { 'Content-Type': item.file.type || 'image/jpeg' },
-        });
+        // Upload file to backend, which handles R2 upload + processing
+        const { data: photo } = await uploadApi.process(albumId, albumSlug, item.file.name, item.file);
 
-        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 70 } : f));
-
-        // 3. Process on backend
-        const { data: photo } = await uploadApi.process(albumId, presignData.key, item.file.name);
+        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 90 } : f));
 
         results.push(photo);
         setFiles((prev) => prev.map((f) =>

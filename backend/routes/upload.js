@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import pool from '../services/db.js';
-import { generatePresignedUrl, uploadToR2, buildPublicUrl } from '../services/r2.js';
+import { uploadToR2, buildPublicUrl } from '../services/r2.js';
 import { processImageBuffer, classifyAspectRatio } from '../services/processor.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -20,26 +20,7 @@ function isSafeFileName(str) {
   return typeof str === 'string' && /^[a-zA-Z0-9 ._-]+$/.test(str) && !str.includes('..');
 }
 
-// POST /api/upload/presign — generate presigned URL for direct browser → R2 upload
-router.post('/presign', requireAuth, async (req, res) => {
-  try {
-    const { albumSlug, fileName, contentType } = req.body;
-    if (!albumSlug || !fileName || !contentType) {
-      return res.status(400).json({ error: 'albumSlug, fileName, contentType required' });
-    }
-    if (!isSafeSlug(albumSlug) || !isSafeFileName(fileName)) {
-      return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
-    }
-    const baseName = fileName.replace(/\.[^.]+$/, '');
-    const key = `albums/${albumSlug}/original/${baseName}.jpg`;
-    const presignedUrl = await generatePresignedUrl(key, contentType);
-    res.json({ data: { presignedUrl, key } });
-  } catch (err) {
-    res.status(500).json({ error: safeError(err) });
-  }
-});
-
-// POST /api/upload/process — process already-uploaded R2 file and insert DB record
+// POST /api/upload/process — upload file to R2, process variants, and insert DB record
 router.post('/process', requireAuth, upload.single('file'), async (req, res) => {
   try {
     const { albumId, albumSlug, fileName, sortOrder = 0 } = req.body;
