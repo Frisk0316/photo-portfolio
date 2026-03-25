@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import pool from '../services/db.js';
-import { downloadFromR2, uploadToR2 } from '../services/r2.js';
+import { buildPublicUrl } from '../services/r2.js';
 import { processImageBuffer, classifyAspectRatio } from '../services/processor.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
@@ -17,6 +17,25 @@ function isSafeSlug(str) {
 
 function isSafeFileName(str) {
   return typeof str === 'string' && /^[a-zA-Z0-9 ._-]+$/.test(str) && !str.includes('..');
+}
+
+// Upload a buffer to R2 via the Cloudflare Worker (avoids S3 API SSL issues)
+async function uploadViaWorker(key, buffer, contentType) {
+  const workerUrl = config.r2.workerUrl;
+  const res = await fetch(workerUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': contentType,
+      'X-Upload-Key': key,
+      'Authorization': `Bearer ${config.r2.workerSecret}`,
+    },
+    body: buffer,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Worker upload failed (${res.status}): ${text}`);
+  }
+  return { key, url: buildPublicUrl(key) };
 }
 
 // POST /api/upload/presign — return the Worker upload URL and R2 key
@@ -41,7 +60,7 @@ router.post('/presign', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/upload/process — download original from R2, generate variants, insert DB record
+// POST /api/upload/process — download original from R2, generate variants, upload via Worker
 router.post('/process', requireAuth, async (req, res) => {
   try {
     const { albumId, albumSlug, key, fileName, sortOrder = 0 } = req.body;
@@ -52,17 +71,23 @@ router.post('/process', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
     }
 
-    // Download the original file from R2 (uploaded by browser via Worker)
-    const buffer = await downloadFromR2(key);
+    // Download the original file from R2 via public URL
+    const publicUrl = buildPublicUrl(key);
+    const fetchRes = await fetch(publicUrl);
+    if (!fetchRes.ok) {
+      return res.status(500).json({ error: `Failed to download from R2: ${fetchRes.status}` });
+    }
+    const buffer = Buffer.from(await fetchRes.arrayBuffer());
     const processed = await processImageBuffer(buffer);
     const baseName = fileName.replace(/\.[^.]+$/, '');
     const prefix = `albums/${albumSlug}`;
 
+    // Upload all variants via Worker (avoids S3 API)
     const [origUpload, thumbUpload, mediumUpload, webpUpload] = await Promise.all([
-      uploadToR2(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg', { variant: 'original' }),
-      uploadToR2(`${prefix}/thumbnail/${baseName}.jpg`, processed.thumbnail.buffer, 'image/jpeg', { variant: 'thumbnail' }),
-      uploadToR2(`${prefix}/medium/${baseName}.jpg`, processed.medium.buffer, 'image/jpeg', { variant: 'medium' }),
-      uploadToR2(`${prefix}/webp/${baseName}.webp`, processed.webp.buffer, 'image/webp', { variant: 'webp' }),
+      uploadViaWorker(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg'),
+      uploadViaWorker(`${prefix}/thumbnail/${baseName}.jpg`, processed.thumbnail.buffer, 'image/jpeg'),
+      uploadViaWorker(`${prefix}/medium/${baseName}.jpg`, processed.medium.buffer, 'image/jpeg'),
+      uploadViaWorker(`${prefix}/webp/${baseName}.webp`, processed.webp.buffer, 'image/webp'),
     ]);
 
     const aspectCategory = classifyAspectRatio(processed.meta.originalWidth, processed.meta.originalHeight);
@@ -89,6 +114,7 @@ router.post('/process', requireAuth, async (req, res) => {
 
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
+    console.error('Process error:', err);
     res.status(500).json({ error: safeError(err) });
   }
 });

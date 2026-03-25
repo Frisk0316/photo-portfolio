@@ -24,14 +24,15 @@ export default {
       return corsJson({ error: 'Method not allowed' }, 405, corsOrigin);
     }
 
-    // Verify JWT
+    // Verify auth: accept either admin JWT (browser) or shared secret (backend)
     const authHeader = request.headers.get('Authorization') || '';
     if (!authHeader.startsWith('Bearer ')) {
       return corsJson({ error: 'Missing token' }, 401, corsOrigin);
     }
     const token = authHeader.slice(7);
-    const valid = await verifyJwt(token, env.JWT_SECRET);
-    if (!valid) {
+    const isServerSecret = env.WORKER_SECRET && token === env.WORKER_SECRET;
+    const isValidJwt = !isServerSecret && await verifyJwt(token, env.JWT_SECRET);
+    if (!isServerSecret && !isValidJwt) {
       return corsJson({ error: 'Invalid token' }, 401, corsOrigin);
     }
 
