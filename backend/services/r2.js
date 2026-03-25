@@ -36,6 +36,16 @@ export async function uploadToR2(key, buffer, contentType, metadata = {}) {
   return { key, url: buildPublicUrl(key) };
 }
 
+export async function downloadFromR2(key) {
+  const s3 = getClient();
+  const response = await s3.send(new GetObjectCommand({ Bucket: config.r2.bucketName, Key: key }));
+  const chunks = [];
+  for await (const chunk of response.Body) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 export async function deleteFromR2(key) {
   const s3 = getClient();
   await s3.send(new DeleteObjectCommand({ Bucket: config.r2.bucketName, Key: key }));

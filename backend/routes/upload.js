@@ -1,12 +1,10 @@
 import { Router } from 'express';
-import multer from 'multer';
 import pool from '../services/db.js';
-import { uploadToR2, buildPublicUrl } from '../services/r2.js';
+import { generatePresignedUrl, downloadFromR2, uploadToR2, buildPublicUrl } from '../services/r2.js';
 import { processImageBuffer, classifyAspectRatio } from '../services/processor.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 function safeError(err) {
   return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
@@ -20,22 +18,43 @@ function isSafeFileName(str) {
   return typeof str === 'string' && /^[a-zA-Z0-9 ._-]+$/.test(str) && !str.includes('..');
 }
 
-// POST /api/upload/process — upload file to R2, process variants, and insert DB record
-router.post('/process', requireAuth, upload.single('file'), async (req, res) => {
+// POST /api/upload/presign — generate presigned URL for direct browser → R2 upload
+router.post('/presign', requireAuth, async (req, res) => {
   try {
-    const { albumId, albumSlug, fileName, sortOrder = 0 } = req.body;
-    if (!albumId || !albumSlug || !fileName || !req.file) {
-      return res.status(400).json({ error: 'albumId, albumSlug, fileName, and file required' });
+    const { albumSlug, fileName, contentType } = req.body;
+    if (!albumSlug || !fileName || !contentType) {
+      return res.status(400).json({ error: 'albumSlug, fileName, contentType required' });
+    }
+    if (!isSafeSlug(albumSlug) || !isSafeFileName(fileName)) {
+      return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
+    }
+    const baseName = fileName.replace(/\.[^.]+$/, '');
+    const key = `albums/${albumSlug}/original/${baseName}.jpg`;
+    const presignedUrl = await generatePresignedUrl(key, contentType);
+    res.json({ data: { presignedUrl, key } });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
+
+// POST /api/upload/process — download original from R2, generate variants, insert DB record
+router.post('/process', requireAuth, async (req, res) => {
+  try {
+    const { albumId, albumSlug, key, fileName, sortOrder = 0 } = req.body;
+    if (!albumId || !albumSlug || !key || !fileName) {
+      return res.status(400).json({ error: 'albumId, albumSlug, key, and fileName required' });
     }
     if (!isSafeSlug(albumSlug) || !isSafeFileName(fileName)) {
       return res.status(400).json({ error: 'Invalid albumSlug or fileName' });
     }
 
-    const buffer = req.file.buffer;
+    // Download the original file from R2 (uploaded by browser via presigned URL)
+    const buffer = await downloadFromR2(key);
     const processed = await processImageBuffer(buffer);
     const baseName = fileName.replace(/\.[^.]+$/, '');
     const prefix = `albums/${albumSlug}`;
 
+    // Re-upload processed original + generate variants
     const [origUpload, thumbUpload, mediumUpload, webpUpload] = await Promise.all([
       uploadToR2(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg', { variant: 'original' }),
       uploadToR2(`${prefix}/thumbnail/${baseName}.jpg`, processed.thumbnail.buffer, 'image/jpeg', { variant: 'thumbnail' }),

@@ -10,15 +10,9 @@ import uploadRoutes from './routes/upload.js';
 const app = express();
 
 // CORS
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'https://ospreay-photo.com',
-  'https://www.ospreay-photo.com',
-  ...config.allowedOrigins,
-];
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    if (!origin || config.allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     callback(null, false);

@@ -53,18 +53,37 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
     const results: Photo[] = [];
 
     for (const item of pending) {
-      // Mark uploading
       setFiles((prev) => prev.map((f) =>
-        f.file === item.file ? { ...f, status: 'uploading', progress: 10 } : f
+        f.file === item.file ? { ...f, status: 'uploading', progress: 5 } : f
       ));
 
       try {
-        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 30 } : f));
+        // Step 1: Get presigned URL from backend (small JSON, through Vercel rewrite)
+        const { data: presignData } = await uploadApi.presign(
+          albumSlug, item.file.name, item.file.type || 'image/jpeg'
+        );
 
-        // Upload file to backend, which handles R2 upload + processing
-        const { data: photo } = await uploadApi.process(albumId, albumSlug, item.file.name, item.file);
+        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 10 } : f));
 
-        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 90 } : f));
+        // Step 2: Upload file directly to R2 via presigned URL (large file, no middleman)
+        const putRes = await fetch(presignData.presignedUrl, {
+          method: 'PUT',
+          body: item.file,
+          headers: {
+            'Content-Type': item.file.type || 'image/jpeg',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          },
+        });
+        if (!putRes.ok) {
+          throw new Error(`R2 upload failed: ${putRes.status} ${putRes.statusText}`);
+        }
+
+        setFiles((prev) => prev.map((f) => f.file === item.file ? { ...f, progress: 60 } : f));
+
+        // Step 3: Tell backend to process the uploaded file (small JSON, through Vercel rewrite)
+        const { data: photo } = await uploadApi.process(
+          albumId, albumSlug, presignData.key, item.file.name
+        );
 
         results.push(photo);
         setFiles((prev) => prev.map((f) =>

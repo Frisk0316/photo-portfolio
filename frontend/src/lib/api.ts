@@ -2,11 +2,6 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === 'l
   ? 'http://localhost:4000'
   : '';
 
-// Upload goes directly to Railway to bypass Vercel's 4.5MB body size limit
-const UPLOAD_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-  ? 'http://localhost:4000'
-  : 'https://determined-enthusiasm-production-22d1.up.railway.app';
-
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('admin_token');
@@ -145,27 +140,17 @@ export const photos = {
     request<{ data: { updated: number } }>(`/api/albums/${albumId}/photos/reorder`, { method: 'PUT', body: JSON.stringify({ items }) }),
 };
 
-// Upload
+// Upload — presign & process go through Vercel rewrite (small JSON),
+// only the large file PUT goes directly to R2 via presigned URL.
 export const upload = {
-  process: async (albumId: number, albumSlug: string, fileName: string, file: File): Promise<{ data: Photo }> => {
-    const token = getToken();
-    const formData = new FormData();
-    formData.append('albumId', String(albumId));
-    formData.append('albumSlug', albumSlug);
-    formData.append('fileName', fileName);
-    formData.append('file', file);
-
-    const res = await fetch(`${UPLOAD_URL}/api/upload/process`, {
+  presign: (albumSlug: string, fileName: string, contentType: string) =>
+    request<{ data: { presignedUrl: string; key: string } }>('/api/upload/presign', {
       method: 'POST',
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-
-    return res.json();
-  },
+      body: JSON.stringify({ albumSlug, fileName, contentType }),
+    }),
+  process: (albumId: number, albumSlug: string, key: string, fileName: string) =>
+    request<{ data: Photo }>('/api/upload/process', {
+      method: 'POST',
+      body: JSON.stringify({ albumId, albumSlug, key, fileName }),
+    }),
 };
