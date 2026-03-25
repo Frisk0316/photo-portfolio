@@ -12,11 +12,14 @@ const app = express();
 // CORS
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || config.allowedOrigins.includes(origin) || config.allowedOrigins.some(o => o.includes('*') && origin.endsWith(o.replace('*', '')))) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin) return callback(null, true);
+    const allowed = config.allowedOrigins;
+    if (allowed.includes(origin) || allowed.includes('*')) {
+      return callback(null, true);
     }
+    // No match — still don't pass an Error (that causes 500), just reject
+    callback(null, false);
   },
   credentials: true,
 }));
