@@ -21,8 +21,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const { token } = await auth.login(username, password);
-      setToken(token);
+      const result = await auth.login(username, password);
+      setToken(result.data.token);
       router.replace('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
