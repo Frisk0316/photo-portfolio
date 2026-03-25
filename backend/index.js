@@ -10,18 +10,19 @@ import uploadRoutes from './routes/upload.js';
 const app = express();
 
 // CORS
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'https://ospreay-photo.com',
+  'https://www.ospreay-photo.com',
+  ...config.allowedOrigins,
+];
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (server-to-server, curl, etc.)
-    if (!origin) return callback(null, true);
-    const allowed = config.allowedOrigins;
-    if (allowed.includes(origin) || allowed.includes('*')) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
       return callback(null, true);
     }
-    // No match — still don't pass an Error (that causes 500), just reject
     callback(null, false);
   },
-  credentials: true,
 }));
 
 app.use(express.json({ limit: '10mb' }));
