@@ -4,15 +4,20 @@ import JustifiedGallery from '@/components/gallery/JustifiedGallery';
 import Footer from '@/components/layout/Footer';
 import { formatDate } from '@/lib/utils';
 
-const API_URL = process.env.BACKEND_URL || 'http://localhost:4000';
+const API_URL = process.env.BACKEND_URL
+  || 'https://determined-enthusiasm-production-22d1.up.railway.app';
 
 async function getAlbum(slug: string) {
-  const res = await fetch(`${API_URL}/api/albums/${slug}`, {
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.data;
+  try {
+    const res = await fetch(`${API_URL}/api/albums/${slug}`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data;
+  } catch {
+    return null;
+  }
 }
 
 export async function generateMetadata({
