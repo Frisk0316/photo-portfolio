@@ -9,6 +9,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { photos as photosApi } from '@/lib/api';
+import { useToast } from '@/hooks/useToast';
 import type { Photo } from '@/lib/api';
 
 function SortablePhoto({ photo, selected, onSelect, onEditCaption }: {
@@ -72,6 +73,8 @@ export default function PhotoGrid({ albumId, photos, onChange }: PhotoGridProps)
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editingPhoto, setEditingPhoto] = useState<Photo | null>(null);
   const [caption, setCaption] = useState('');
+  const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null);
+  const { showSuccess, showError } = useToast();
 
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -97,9 +100,31 @@ export default function PhotoGrid({ albumId, photos, onChange }: PhotoGridProps)
   async function handleBulkDelete() {
     if (!selected.size) return;
     if (!confirm(`Delete ${selected.size} photos?`)) return;
-    await photosApi.bulkDelete(Array.from(selected));
+    const ids = Array.from(selected);
+    const total = ids.length;
+    let deleted = 0;
+    let failed = 0;
+    setDeleteProgress({ current: 0, total });
+
+    for (const id of ids) {
+      try {
+        await photosApi.delete(id);
+        deleted++;
+      } catch {
+        failed++;
+      }
+      setDeleteProgress({ current: deleted + failed, total });
+    }
+
+    setDeleteProgress(null);
     onChange(photos.filter((p) => !selected.has(p.id)));
     setSelected(new Set());
+
+    if (failed === 0) {
+      showSuccess(`已刪除 ${deleted} 張照片`);
+    } else {
+      showError(`已刪除 ${deleted} 張，${failed} 張失敗`);
+    }
   }
 
   function openEditCaption(photo: Photo) {
@@ -116,7 +141,29 @@ export default function PhotoGrid({ albumId, photos, onChange }: PhotoGridProps)
 
   return (
     <div>
-      {selected.size > 0 && (
+      {deleteProgress && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Deleting {deleteProgress.current} / {deleteProgress.total}
+            </span>
+            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              {Math.round((deleteProgress.current / deleteProgress.total) * 100)}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-elevated)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${(deleteProgress.current / deleteProgress.total) * 100}%`,
+                background: 'var(--accent, rgba(255,255,255,0.7))',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {selected.size > 0 && !deleteProgress && (
         <div className="mb-4 flex items-center gap-3">
           <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{selected.size} selected</span>
           <button onClick={handleBulkDelete} className="text-xs text-red-400 hover:text-red-300">

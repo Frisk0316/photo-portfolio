@@ -5,8 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
 const navItems = [
-  { href: '/admin', label: 'Dashboard', exact: true },
-  { href: '/admin/albums', label: 'Albums' },
+  { href: '/admin', label: 'Dashboard' },
   { href: '/admin/categories', label: 'Categories' },
 ];
 
@@ -26,9 +25,9 @@ export default function Sidebar() {
 
       <nav className="flex-1 px-3 overflow-y-auto">
         {navItems.map((item) => {
-          const active = item.exact
-            ? pathname === item.href
-            : pathname.startsWith(item.href) && !(item.exact && pathname !== item.href);
+          const active = item.href === '/admin'
+            ? pathname === '/admin' || pathname.startsWith('/admin/albums')
+            : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
