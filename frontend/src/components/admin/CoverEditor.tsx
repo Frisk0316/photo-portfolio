@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { Photo } from '@/lib/api';
 
-interface CoverCropData {
-  offsetX: number;
-  offsetY: number;
-  zoom: number;
+export interface CoverCropData {
+  offsetX: number; // range [-1, 1], 0 = centered
+  offsetY: number; // range [-1, 1], 0 = centered
+  zoom: number;    // >= 1
 }
 
 interface CoverEditorProps {
@@ -27,79 +27,59 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const previewRef = useRef<HTMLDivElement>(null);
+  const [dragCropStart, setDragCropStart] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedPhoto = photos.find((p) => p.id === selectedPhotoId);
 
-  // Reset crop when selecting a different photo
   function handleSelectPhoto(photoId: number) {
     if (photoId === selectedPhotoId) return;
     setSelectedPhotoId(photoId);
     setCrop(photoId === coverPhotoId && coverCropData ? coverCropData : DEFAULT_CROP);
   }
 
-  // Clamp offset so image never reveals empty space
-  const clampOffset = useCallback((ox: number, oy: number, zoom: number, photo: Photo) => {
-    // Preview is 4:3 aspect, image is photo.width x photo.height
-    // At zoom=1 the image fills the preview (object-cover behavior)
-    // We need to figure out the effective scale
-    const previewAspect = 4 / 3;
-    const photoAspect = photo.width / photo.height;
-
-    let maxOffsetX = 0;
-    let maxOffsetY = 0;
-
-    if (photoAspect > previewAspect) {
-      // Image is wider than preview — horizontal overflow
-      // At zoom=1, image height matches preview height, so:
-      // visibleWidthRatio = previewAspect / photoAspect
-      const visibleWidthRatio = previewAspect / photoAspect;
-      maxOffsetX = ((1 - visibleWidthRatio / zoom) / 2) * 100;
-      maxOffsetY = ((1 - 1 / zoom) / 2) * 100;
-    } else {
-      // Image is taller than preview — vertical overflow
-      const visibleHeightRatio = photoAspect / previewAspect;
-      maxOffsetX = ((1 - 1 / zoom) / 2) * 100;
-      maxOffsetY = ((1 - visibleHeightRatio / zoom) / 2) * 100;
-    }
-
+  function clampOffset(ox: number, oy: number) {
     return {
-      offsetX: Math.max(-maxOffsetX, Math.min(maxOffsetX, ox)),
-      offsetY: Math.max(-maxOffsetY, Math.min(maxOffsetY, oy)),
+      offsetX: Math.max(-1, Math.min(1, ox)),
+      offsetY: Math.max(-1, Math.min(1, oy)),
     };
-  }, []);
+  }
 
   function handleZoomChange(newZoom: number) {
     if (!selectedPhoto) return;
     const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
-    const clamped = clampOffset(crop.offsetX, crop.offsetY, z, selectedPhoto);
+    const clamped = clampOffset(crop.offsetX, crop.offsetY);
     setCrop({ ...clamped, zoom: z });
   }
 
-  // Mouse/touch drag
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     setDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
-    setDragOffset({ x: crop.offsetX, y: crop.offsetY });
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setDragCropStart({ x: crop.offsetX, y: crop.offsetY });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }, [crop.offsetX, crop.offsetY]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging || !selectedPhoto || !previewRef.current) return;
-    const rect = previewRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - dragStart.x) / rect.width) * 100;
-    const dy = ((e.clientY - dragStart.y) / rect.height) * 100;
-    const clamped = clampOffset(dragOffset.x + dx, dragOffset.y + dy, crop.zoom, selectedPhoto);
+    if (!dragging || !selectedPhoto || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+
+    // Sensitivity: how many pixels to drag to go from offset 0 to offset 1
+    // Higher zoom = more image area = need more precise dragging
+    const sensitivity = Math.max(rect.width, rect.height) * crop.zoom * 0.5;
+
+    // Dragging right → image follows → show left side → offsetX decreases
+    const dx = -(e.clientX - dragStart.x) / sensitivity;
+    const dy = -(e.clientY - dragStart.y) / sensitivity;
+
+    const clamped = clampOffset(dragCropStart.x + dx, dragCropStart.y + dy);
     setCrop((prev) => ({ ...prev, ...clamped }));
-  }, [dragging, dragStart, dragOffset, crop.zoom, selectedPhoto, clampOffset]);
+  }, [dragging, dragStart, dragCropStart, crop.zoom, selectedPhoto]);
 
   const handlePointerUp = useCallback(() => {
     setDragging(false);
   }, []);
 
-  // Reset
   function handleReset() {
     setCrop(DEFAULT_CROP);
   }
@@ -119,19 +99,30 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
     crop.offsetY !== (coverCropData?.offsetY ?? 0) ||
     crop.zoom !== (coverCropData?.zoom ?? 1);
 
-  const imageStyle: React.CSSProperties = selectedPhoto ? {
-    transform: `translate(${crop.offsetX}%, ${crop.offsetY}%) scale(${crop.zoom})`,
-    transition: dragging ? 'none' : 'transform 0.15s ease-out',
-  } : {};
+  // Convert offset to CSS object-position & transform
+  const posX = 50 + crop.offsetX * 50;
+  const posY = 50 + crop.offsetY * 50;
+
+  const imageStyle: React.CSSProperties = {
+    objectPosition: `${posX}% ${posY}%`,
+    transform: `scale(${crop.zoom})`,
+    transformOrigin: `${posX}% ${posY}%`,
+    transition: dragging ? 'none' : 'all 0.15s ease-out',
+    pointerEvents: 'none' as const,
+  };
 
   return (
     <div className="space-y-4">
       {/* Preview area */}
       <div className="flex flex-col items-center gap-3">
         <div
-          ref={previewRef}
+          ref={containerRef}
           className="aspect-[4/3] w-full max-w-md overflow-hidden rounded relative select-none"
-          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', cursor: dragging ? 'grabbing' : 'grab' }}
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            cursor: selectedPhoto ? (dragging ? 'grabbing' : 'grab') : 'default',
+          }}
           onPointerDown={selectedPhoto ? handlePointerDown : undefined}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -140,7 +131,7 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
             <img
               src={selectedPhoto.url_medium || selectedPhoto.url_thumbnail}
               alt="Cover preview"
-              className="w-full h-full object-cover pointer-events-none"
+              className="w-full h-full object-cover"
               style={imageStyle}
               draggable={false}
             />

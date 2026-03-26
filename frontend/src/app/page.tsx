@@ -88,16 +88,7 @@ function AlbumCard({ album }: { album: Album }) {
       {/* Cover image */}
       <div className="aspect-[4/3] overflow-hidden bg-[var(--bg-elevated)] relative">
         {album.cover_url ? (
-          <div className="w-full h-full transition-transform duration-500 group-hover:scale-105">
-            <img
-              src={album.cover_url}
-              alt={album.title}
-              className="w-full h-full object-cover"
-              style={album.cover_crop_data ? {
-                transform: `translate(${album.cover_crop_data.offsetX}%, ${album.cover_crop_data.offsetY}%) scale(${album.cover_crop_data.zoom})`,
-              } : undefined}
-            />
-          </div>
+          <CoverImage url={album.cover_url} alt={album.title} cropData={album.cover_crop_data} />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-sm"
             style={{ color: 'var(--text-tertiary)' }}>
@@ -121,5 +112,52 @@ function AlbumCard({ album }: { album: Album }) {
         </p>
       </div>
     </Link>
+  );
+}
+
+/**
+ * Renders a cover image with optional crop data.
+ * Uses object-cover + transform-origin/scale to handle zoom & offset
+ * without ever showing empty space.
+ *
+ * cropData.offsetX/Y: [-1, 1] where 0 = center
+ * cropData.zoom: >= 1
+ *
+ * We convert offset to object-position for panning,
+ * and use transform: scale() with matching transform-origin for zoom.
+ */
+function CoverImage({ url, alt, cropData }: {
+  url: string;
+  alt: string;
+  cropData: { offsetX: number; offsetY: number; zoom: number } | null;
+}) {
+  if (!cropData || (cropData.zoom === 1 && cropData.offsetX === 0 && cropData.offsetY === 0)) {
+    return (
+      <img
+        src={url}
+        alt={alt}
+        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+      />
+    );
+  }
+
+  // Convert normalized offset [-1,1] to object-position percentage
+  // -1 → 0%, 0 → 50%, 1 → 100%
+  const posX = 50 + cropData.offsetX * 50;
+  const posY = 50 + cropData.offsetY * 50;
+
+  return (
+    <div className="w-full h-full overflow-hidden transition-transform duration-500 group-hover:scale-105">
+      <img
+        src={url}
+        alt={alt}
+        className="w-full h-full object-cover"
+        style={{
+          objectPosition: `${posX}% ${posY}%`,
+          transform: `scale(${cropData.zoom})`,
+          transformOrigin: `${posX}% ${posY}%`,
+        }}
+      />
+    </div>
   );
 }
