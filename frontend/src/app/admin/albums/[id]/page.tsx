@@ -48,7 +48,7 @@ export default function EditAlbumPage({ params }: { params: { id: string } }) {
   return (
     <div>
       <div className="flex items-center gap-4 mb-8">
-        <Link href="/admin/albums" className="text-xs" style={{ color: 'var(--text-tertiary)' }}>← Albums</Link>
+        <Link href="/admin" className="text-xs" style={{ color: 'var(--text-tertiary)' }}>← Albums</Link>
         <h1 className="text-2xl" style={{ fontFamily: 'var(--font-playfair)' }}>{album.title}</h1>
       </div>
 
