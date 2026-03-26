@@ -60,80 +60,80 @@ async function collectImages(dir) {
   return images;
 }
 
-async function scanDirectory(rootDir) {
-  const result = { albums: [], skipped: [], errors: [] };
-  let rootEntries;
+async function tryAddAlbum(result, folderName, folderPath, parsed) {
+  const editedPath = await findEditedFolder(folderPath);
+  if (!editedPath) {
+    result.skipped.push({ name: folderName, reason: '找不到「調整後 JPG」資料夾' });
+    return false;
+  }
+  const images = await collectImages(editedPath);
+  if (images.length === 0) {
+    result.skipped.push({ name: folderName, reason: '資料夾是空的' });
+    return false;
+  }
+  result.albums.push({
+    folderName,
+    title: `${parsed.date.replace(/-/g, '')} - ${parsed.title}`,
+    albumTitle: parsed.title,
+    date: parsed.date,
+    slug: parsed.slug,
+    editedPath,
+    photoCount: images.length,
+    photos: images.map(i => ({ fileName: i.fileName, absolutePath: i.absolutePath, sortOrder: i.sortOrder })),
+  });
+  return true;
+}
+
+async function scanFolderForAlbums(result, dirPath, depth = 0) {
+  if (depth > 2) return; // Limit recursion depth
+
+  let entries;
   try {
-    rootEntries = await fs.readdir(rootDir, { withFileTypes: true });
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
   } catch (err) {
-    result.errors.push(`Cannot read directory: ${err.message}`);
-    return result;
+    result.errors.push(`無法讀取 ${dirPath}: ${err.message}`);
+    return;
   }
 
-  const folders = rootEntries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  const folders = entries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
 
   for (const folder of folders) {
-    const folderPath = path.join(rootDir, folder.name);
+    const folderPath = path.join(dirPath, folder.name);
     const parsed = parseAlbumFolder(folder.name);
 
     if (parsed) {
-      // Direct album folder
-      const editedPath = await findEditedFolder(folderPath);
-      if (!editedPath) {
-        result.skipped.push({ name: folder.name, reason: '找不到「調整後 JPG」資料夾' });
-        continue;
-      }
-      const images = await collectImages(editedPath);
-      if (images.length === 0) {
-        result.skipped.push({ name: folder.name, reason: '資料夾是空的' });
-        continue;
-      }
-      result.albums.push({
-        folderName: folder.name,
-        title: `${parsed.date.replace(/-/g, '')} - ${parsed.title}`,
-        albumTitle: parsed.title,
-        date: parsed.date,
-        slug: parsed.slug,
-        editedPath,
-        photoCount: images.length,
-        photos: images.map(i => ({ fileName: i.fileName, absolutePath: i.absolutePath, sortOrder: i.sortOrder })),
-      });
+      await tryAddAlbum(result, folder.name, folderPath, parsed);
     } else {
-      // Possibly a parent folder (e.g., "20251229 ~ 20260107 日本行")
-      // Scan inside for album subfolders
-      const subEntries = await fs.readdir(folderPath, { withFileTypes: true });
-      let foundSub = false;
-      for (const sub of subEntries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-        const subParsed = parseAlbumFolder(sub.name);
-        if (!subParsed) continue;
-        foundSub = true;
-        const subPath = path.join(folderPath, sub.name);
-        const editedPath = await findEditedFolder(subPath);
-        if (!editedPath) {
-          result.skipped.push({ name: sub.name, reason: '找不到「調整後 JPG」資料夾' });
-          continue;
-        }
-        const images = await collectImages(editedPath);
-        if (images.length === 0) {
-          result.skipped.push({ name: sub.name, reason: '資料夾是空的' });
-          continue;
-        }
-        result.albums.push({
-          folderName: sub.name,
-          title: `${subParsed.date.replace(/-/g, '')} - ${subParsed.title}`,
-          albumTitle: subParsed.title,
-          date: subParsed.date,
-          slug: subParsed.slug,
-          editedPath,
-          photoCount: images.length,
-          photos: images.map(i => ({ fileName: i.fileName, absolutePath: i.absolutePath, sortOrder: i.sortOrder })),
-        });
-      }
-      if (!foundSub) {
-        result.skipped.push({ name: folder.name, reason: '不符合 YYYYMMDD - 標題 格式' });
-      }
+      // Non-album folder — recurse deeper to find album subfolders
+      await scanFolderForAlbums(result, folderPath, depth + 1);
     }
   }
+}
+
+async function scanDirectory(rootDir) {
+  const result = { albums: [], skipped: [], errors: [] };
+
+  // Normalize Windows path (handle both \ and /)
+  const normalizedDir = path.resolve(rootDir);
+
+  // Check if rootDir itself is readable
+  try {
+    await fs.access(normalizedDir);
+  } catch (err) {
+    result.errors.push(`無法存取路徑: ${normalizedDir} — ${err.message}`);
+    return result;
+  }
+
+  // Check if rootDir itself matches the album pattern
+  const rootFolderName = path.basename(normalizedDir);
+  const rootParsed = parseAlbumFolder(rootFolderName);
+  if (rootParsed) {
+    await tryAddAlbum(result, rootFolderName, normalizedDir, rootParsed);
+  } else {
+    // Scan children recursively
+    await scanFolderForAlbums(result, normalizedDir);
+  }
+
   return result;
 }
 
