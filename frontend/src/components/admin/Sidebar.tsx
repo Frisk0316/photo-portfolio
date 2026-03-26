@@ -8,7 +8,6 @@ const navItems = [
   { href: '/admin', label: 'Dashboard', exact: true },
   { href: '/admin/albums', label: 'Albums' },
   { href: '/admin/categories', label: 'Categories' },
-  { href: '/admin/batch-upload', label: 'Batch Upload' },
 ];
 
 export default function Sidebar() {

@@ -70,6 +70,57 @@ async function collectImages(dir, basePath = dir, images = []) {
   return images;
 }
 
+async function scanAlbumFolder(folderName, folderPath, manifest) {
+  const parsed = parseAlbumFolder(folderName);
+  if (!parsed) {
+    manifest.skippedFolders.push({ name: folderName, reason: 'Does not match YYYYMMDD - Title format' });
+    return;
+  }
+
+  const editedPath = await findEditedFolder(folderPath);
+  if (!editedPath) {
+    manifest.skippedFolders.push({ name: folderName, reason: `No edited folder found (looked for: ${config.editedFolderNames.join(', ')})` });
+    return;
+  }
+
+  let images;
+  try {
+    images = await collectImages(editedPath);
+  } catch (err) {
+    manifest.errors.push({ path: editedPath, error: `Failed to scan: ${err.message}` });
+    return;
+  }
+
+  if (images.length === 0) {
+    manifest.skippedFolders.push({ name: folderName, reason: 'Edited folder is empty' });
+    return;
+  }
+
+  const imagesWithSize = await Promise.all(
+    images.map(async (img) => {
+      try {
+        const stat = await fs.stat(img.absolutePath);
+        return { ...img, fileSize: stat.size };
+      } catch {
+        return { ...img, fileSize: 0 };
+      }
+    })
+  );
+
+  const groups = [...new Set(imagesWithSize.map(i => i.group).filter(Boolean))];
+
+  manifest.albums.push({
+    folderName,
+    ...parsed,
+    editedFolderPath: editedPath,
+    photos: imagesWithSize,
+    photoCount: imagesWithSize.length,
+    totalSize: imagesWithSize.reduce((sum, i) => sum + i.fileSize, 0),
+    groups,
+  });
+  manifest.totalPhotos += imagesWithSize.length;
+}
+
 export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
   const manifest = {
     scannedAt: new Date().toISOString(),
@@ -79,6 +130,13 @@ export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
     skippedFolders: [],
     errors: [],
   };
+
+  // Check if rootDir itself is an album folder
+  const rootFolderName = path.basename(rootDir);
+  if (parseAlbumFolder(rootFolderName)) {
+    await scanAlbumFolder(rootFolderName, rootDir, manifest);
+    return manifest;
+  }
 
   let rootEntries;
   try {
@@ -92,54 +150,7 @@ export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
 
   for (const folder of albumFolders) {
     const folderPath = path.join(rootDir, folder.name);
-    const parsed = parseAlbumFolder(folder.name);
-    if (!parsed) {
-      manifest.skippedFolders.push({ name: folder.name, reason: 'Does not match YYYYMMDD - Title format' });
-      continue;
-    }
-
-    const editedPath = await findEditedFolder(folderPath);
-    if (!editedPath) {
-      manifest.skippedFolders.push({ name: folder.name, reason: `No edited folder found (looked for: ${config.editedFolderNames.join(', ')})` });
-      continue;
-    }
-
-    let images;
-    try {
-      images = await collectImages(editedPath);
-    } catch (err) {
-      manifest.errors.push({ path: editedPath, error: `Failed to scan: ${err.message}` });
-      continue;
-    }
-
-    if (images.length === 0) {
-      manifest.skippedFolders.push({ name: folder.name, reason: 'Edited folder is empty' });
-      continue;
-    }
-
-    const imagesWithSize = await Promise.all(
-      images.map(async (img) => {
-        try {
-          const stat = await fs.stat(img.absolutePath);
-          return { ...img, fileSize: stat.size };
-        } catch {
-          return { ...img, fileSize: 0 };
-        }
-      })
-    );
-
-    const groups = [...new Set(imagesWithSize.map(i => i.group).filter(Boolean))];
-
-    manifest.albums.push({
-      folderName: folder.name,
-      ...parsed,
-      editedFolderPath: editedPath,
-      photos: imagesWithSize,
-      photoCount: imagesWithSize.length,
-      totalSize: imagesWithSize.reduce((sum, i) => sum + i.fileSize, 0),
-      groups,
-    });
-    manifest.totalPhotos += imagesWithSize.length;
+    await scanAlbumFolder(folder.name, folderPath, manifest);
   }
 
   return manifest;

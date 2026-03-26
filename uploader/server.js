@@ -101,12 +101,21 @@ app.post('/api/upload', async (req, res) => {
 
   try {
     await initializeSchema();
-    const manifest = await scanPhotosDirectory(req.body.rootDir || config.photosRootDir);
+    const rootDir = req.body.rootDir || config.photosRootDir;
+    console.log('[upload] rootDir:', rootDir);
+    console.log('[upload] selectedSlugs:', selectedSlugs);
+    const manifest = await scanPhotosDirectory(rootDir);
+    console.log('[upload] scanned albums:', manifest.albums.map(a => a.slug));
     const albumsToUpload = selectedSlugs
       ? manifest.albums.filter(a => selectedSlugs.includes(a.slug))
       : manifest.albums;
+    console.log('[upload] matched albums:', albumsToUpload.length);
+    if (albumsToUpload.length > 0) {
+      console.log('[upload] first album photos:', albumsToUpload[0].photoCount);
+    }
 
     let totalPhotos = albumsToUpload.reduce((s, a) => s + a.photoCount, 0);
+    console.log('[upload] totalPhotos:', totalPhotos);
     let globalPhoto = 0;
     let uploaded = 0, skipped = 0, failed = 0;
     const startTime = Date.now();
@@ -170,8 +179,10 @@ app.post('/api/upload', async (req, res) => {
       send('album_done', { index: ai, name: album.folderName });
     }
 
+    console.log('[upload] done:', { uploaded, skipped, failed });
     send('complete', { uploaded, skipped, failed, elapsed: ((Date.now() - startTime) / 1000).toFixed(1) });
   } catch (err) {
+    console.error('[upload] ERROR:', err);
     send('error', { message: err.message });
   }
 
@@ -399,7 +410,7 @@ function renderAlbums() {
   let html = '<p style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px">'+albums.length+' albums, '+total+' photos, '+totalSize+' MB</p>';
   html += '<table><thead><tr><th style="width:30px"></th><th>Folder</th><th>Date</th><th>Title</th><th class="text-right">Photos</th></tr></thead><tbody>';
   albums.forEach((a, i) => {
-    html += '<tr><td><input type="checkbox" '+(a.selected?'checked':'')+' onchange="albums['+i+'].selected=this.checked"></td>';
+    html += '<tr><td><input type="checkbox" '+(a.selected?'checked':'')+' onchange="albums['+i+'].selected=this.checked;updateUploadBtn()"></td>';
     html += '<td class="mono">'+esc(a.folderName)+'</td>';
     html += '<td class="mono">'+a.date+'</td>';
     html += '<td>'+esc(a.title)+'</td>';

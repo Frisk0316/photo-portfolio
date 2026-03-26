@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
     }
     const result = await pool.query(`
       SELECT a.*, c.name as category_name,
-        p.url_thumbnail as cover_url
+        p.url_medium as cover_url
       FROM albums a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN photos p ON a.cover_photo_id = p.id
