@@ -186,10 +186,19 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
           {/* Slideshow toggle */}
           <button
             onClick={() => setIsPlaying((s) => !s)}
-            className="text-white/40 hover:text-white transition-colors text-sm"
+            className="text-white/40 hover:text-white transition-colors"
             title={isPlaying ? '暫停幻燈片' : '播放幻燈片'}
           >
-            {isPlaying ? '⏸' : '▶'}
+            {isPlaying ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 4l14 8-14 8V4z" />
+              </svg>
+            )}
           </button>
 
           {/* EXIF toggle */}

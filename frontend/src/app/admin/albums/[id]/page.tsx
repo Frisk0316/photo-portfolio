@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AlbumForm from '@/components/admin/AlbumForm';
 import PhotoGrid from '@/components/admin/PhotoGrid';
+import CoverEditor from '@/components/admin/CoverEditor';
 import { albums } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import type { Album, Photo } from '@/lib/api';
@@ -55,6 +56,20 @@ export default function EditAlbumPage({ params }: { params: { id: string } }) {
         <h2 className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Album Settings</h2>
         <AlbumForm initial={album} onSubmit={handleSave} submitLabel="Save Changes" />
       </div>
+
+      {album.photos && album.photos.length > 0 && (
+        <div className="mb-10">
+          <h2 className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Cover Photo</h2>
+          <CoverEditor
+            photos={album.photos}
+            coverPhotoId={album.cover_photo_id}
+            coverCropData={album.cover_crop_data}
+            onSave={async (coverPhotoId, cropData) => {
+              await handleSave({ cover_photo_id: coverPhotoId, cover_crop_data: cropData } as Partial<Album>);
+            }}
+          />
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-4">

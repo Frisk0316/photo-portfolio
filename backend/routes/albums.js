@@ -108,7 +108,7 @@ router.put('/reorder', requireAuth, async (req, res) => {
 // PUT /api/albums/:id
 router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const { title, description, category_id, shot_date, is_published, cover_photo_id, sort_order } = req.body;
+    const { title, description, category_id, shot_date, is_published, cover_photo_id, cover_crop_data, sort_order } = req.body;
     const slug = title ? slugify(title) : undefined;
     const result = await pool.query(
       `UPDATE albums SET
@@ -120,9 +120,10 @@ router.put('/:id', requireAuth, async (req, res) => {
         is_published = COALESCE($6, is_published),
         cover_photo_id = COALESCE($7, cover_photo_id),
         sort_order = COALESCE($8, sort_order),
+        cover_crop_data = COALESCE($9, cover_crop_data),
         updated_at = NOW()
-       WHERE id = $9 RETURNING *`,
-      [title, slug, description, category_id, shot_date, is_published, cover_photo_id, sort_order, req.params.id]
+       WHERE id = $10 RETURNING *`,
+      [title, slug, description, category_id, shot_date, is_published, cover_photo_id, sort_order, cover_crop_data ? JSON.stringify(cover_crop_data) : null, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ data: result.rows[0] });

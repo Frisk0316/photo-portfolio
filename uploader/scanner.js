@@ -17,12 +17,12 @@ export function parseAlbumFolder(folderName) {
     month: parseInt(month),
     day: parseInt(day),
     title: title.trim(),
-    slug: slugify(title.trim()),
+    slug: `${year}${month}${day}-${slugify(title.trim())}`,
   };
 }
 
 function slugify(text) {
-  return text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return text.toLowerCase().replace(/[\s_]+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg']);

@@ -226,11 +226,33 @@ async function uploadImageVariants(albumSlug, fileName, processed) {
 router.post('/scan', requireAuth, async (req, res) => {
   try {
     const { rootDir } = req.body;
+    console.log('[batch-upload/scan] rootDir:', JSON.stringify(rootDir));
     if (!rootDir) return res.status(400).json({ error: '請提供根目錄路徑' });
 
+    const normalized = path.resolve(rootDir);
+    console.log('[batch-upload/scan] normalized:', normalized);
+
+    // Quick sanity check
+    try {
+      const stat = await fs.stat(normalized);
+      console.log('[batch-upload/scan] stat:', { isDirectory: stat.isDirectory() });
+    } catch (statErr) {
+      console.log('[batch-upload/scan] stat error:', statErr.message);
+    }
+
+    // List immediate children for debugging
+    try {
+      const children = await fs.readdir(normalized);
+      console.log('[batch-upload/scan] children:', children);
+    } catch (readErr) {
+      console.log('[batch-upload/scan] readdir error:', readErr.message);
+    }
+
     const result = await scanDirectory(rootDir);
+    console.log('[batch-upload/scan] result:', JSON.stringify({ albumCount: result.albums.length, skipped: result.skipped, errors: result.errors }));
     res.json({ data: result });
   } catch (err) {
+    console.error('[batch-upload/scan] error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -35,16 +35,33 @@ class ProgressTracker {
   }
   albumStart(name, count) {
     this.currentAlbum++;
+    this.currentAlbumName = name;
     this.albumPhotoCount = count; this.albumPhotoDone = 0;
-    console.log(`\n[${this.currentAlbum}/${this.totalAlbums}] ${name} (${count} photos)`);
+    console.log(`\n━━ [${this.currentAlbum}/${this.totalAlbums}] ${name} (${count} photos) ━━`);
   }
-  photoComplete(fileName, status) {
+  photoComplete(fileName, status, error) {
     this.currentPhoto++; this.albumPhotoDone++;
-    const sym = status === 'uploaded' ? '+' : status === 'skipped' ? '>' : 'x';
-    if (status === 'uploaded') this.uploaded++; else if (status === 'skipped') this.skipped++; else this.failed++;
     const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(0);
-    process.stdout.write(`\r  ${sym} [${this.currentPhoto}/${this.totalPhotos}] (${this.albumPhotoDone}/${this.albumPhotoCount}) ${fileName} — ${elapsed}s`);
-    if (this.albumPhotoDone === this.albumPhotoCount) console.log('');
+    const progress = `[${this.currentPhoto}/${this.totalPhotos}] (${this.albumPhotoDone}/${this.albumPhotoCount})`;
+    // ETA calculation
+    const elapsedSec = (Date.now() - this.startTime) / 1000;
+    const avgPerPhoto = this.currentPhoto > 0 ? elapsedSec / this.currentPhoto : 0;
+    const remaining = Math.round(avgPerPhoto * (this.totalPhotos - this.currentPhoto));
+    const etaMin = Math.floor(remaining / 60);
+    const etaSec = remaining % 60;
+    const eta = remaining > 0 ? ` | ETA ${etaMin > 0 ? `${etaMin}m` : ''}${etaSec}s` : '';
+
+    if (status === 'uploaded') {
+      this.uploaded++;
+      console.log(`  ✓ ${progress} ${fileName} — ${elapsed}s${eta}`);
+    } else if (status === 'skipped') {
+      this.skipped++;
+      console.log(`  → ${progress} ${fileName} — 已跳過（已存在）${eta}`);
+    } else {
+      this.failed++;
+      const reason = error || '未知錯誤';
+      console.log(`  ✗ ${progress} ${fileName} — 失敗: ${reason}${eta}`);
+    }
   }
   addError(album, file, err) { this.errors.push({ album, file, error: err.message || err }); }
   printSummary() {
@@ -122,7 +139,7 @@ async function main() {
         progress.photoComplete(photo.fileName, 'uploaded');
       } catch (err) {
         progress.addError(album.folderName, photo.fileName, err);
-        progress.photoComplete(photo.fileName, 'failed');
+        progress.photoComplete(photo.fileName, 'failed', err.message || String(err));
       }
     });
     await updateAlbumStats(albumId);

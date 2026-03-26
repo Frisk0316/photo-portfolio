@@ -86,6 +86,7 @@ export interface Album {
   shot_date: string | null;
   folder_name: string | null;
   cover_photo_id: number | null;
+  cover_crop_data: { offsetX: number; offsetY: number; zoom: number } | null;
   photo_count: number;
   is_published: boolean;
   sort_order: number;
