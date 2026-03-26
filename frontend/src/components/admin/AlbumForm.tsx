@@ -21,15 +21,13 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
   const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [slugManual, setSlugManual] = useState(!!initial.slug);
-
   useEffect(() => {
     categories.list().then((r) => setCategoryList(r.data));
   }, []);
 
   useEffect(() => {
-    if (!slugManual) setSlug(slugify(title));
-  }, [title, slugManual]);
+    setSlug(slugify(title));
+  }, [title]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,12 +64,11 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
 
       <div>
         <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-          Slug *
+          Slug
         </label>
         <input
-          type="text" value={slug}
-          onChange={(e) => { setSlugManual(true); setSlug(e.target.value); }} required
-          className={inputClass} style={{ ...inputStyle, fontFamily: 'var(--font-dm-mono)' }}
+          type="text" value={slug} readOnly
+          className={inputClass} style={{ ...inputStyle, fontFamily: 'var(--font-dm-mono)', opacity: 0.5 }}
         />
       </div>
 

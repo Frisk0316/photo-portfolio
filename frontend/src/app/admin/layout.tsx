@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import Sidebar from '@/components/admin/Sidebar';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { ToastProvider } from '@/components/ui/Toast';
 import { usePathname } from 'next/navigation';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -23,9 +24,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!authed) return null;
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 overflow-auto p-8">{children}</main>
-    </div>
+    <ToastProvider>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <main className="flex-1 overflow-auto p-8">{children}</main>
+      </div>
+    </ToastProvider>
   );
 }

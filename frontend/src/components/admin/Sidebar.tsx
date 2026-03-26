@@ -8,6 +8,7 @@ const navItems = [
   { href: '/admin', label: 'Dashboard', exact: true },
   { href: '/admin/albums', label: 'Albums' },
   { href: '/admin/categories', label: 'Categories' },
+  { href: '/admin/batch-upload', label: 'Batch Upload' },
 ];
 
 export default function Sidebar() {
@@ -15,7 +16,7 @@ export default function Sidebar() {
   const { logout } = useAuth(false);
 
   return (
-    <aside className="w-56 shrink-0 flex flex-col min-h-screen"
+    <aside className="w-56 shrink-0 flex flex-col h-screen sticky top-0"
       style={{ background: 'var(--bg-surface)', borderRight: '1px solid var(--border)' }}>
       <div className="p-6">
         <Link href="/" className="text-sm font-display block mb-1" style={{ fontFamily: 'var(--font-playfair)' }}>
@@ -24,7 +25,7 @@ export default function Sidebar() {
         <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Admin</p>
       </div>
 
-      <nav className="flex-1 px-3">
+      <nav className="flex-1 px-3 overflow-y-auto">
         {navItems.map((item) => {
           const active = item.exact
             ? pathname === item.href

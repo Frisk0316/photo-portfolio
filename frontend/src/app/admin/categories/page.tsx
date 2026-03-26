@@ -10,6 +10,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { categories as catApi } from '@/lib/api';
 import { slugify } from '@/lib/utils';
+import { useToast } from '@/hooks/useToast';
 import type { Category } from '@/lib/api';
 
 function SortableCategoryRow({ cat, onSave, onDelete }: {
@@ -70,6 +71,7 @@ export default function CategoriesPage() {
   const [catList, setCatList] = useState<Category[]>([]);
   const [newName, setNewName] = useState('');
   const sensors = useSensors(useSensor(PointerSensor));
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     catApi.list().then((r) => setCatList(r.data));
@@ -87,20 +89,35 @@ export default function CategoriesPage() {
 
   async function handleCreate() {
     if (!newName.trim()) return;
-    const result = await catApi.create({ name: newName.trim(), slug: slugify(newName.trim()) });
-    setCatList((prev) => [...prev, result.data]);
-    setNewName('');
+    try {
+      const result = await catApi.create({ name: newName.trim(), slug: slugify(newName.trim()) });
+      setCatList((prev) => [...prev, result.data]);
+      setNewName('');
+      showSuccess('已順利儲存');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '建立失敗');
+    }
   }
 
   async function handleSave(id: number, name: string) {
-    await catApi.update(id, { name, slug: slugify(name) });
-    setCatList((prev) => prev.map((c) => c.id === id ? { ...c, name, slug: slugify(name) } : c));
+    try {
+      await catApi.update(id, { name, slug: slugify(name) });
+      setCatList((prev) => prev.map((c) => c.id === id ? { ...c, name, slug: slugify(name) } : c));
+      showSuccess('已順利儲存');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '儲存失敗');
+    }
   }
 
   async function handleDelete(id: number) {
     if (!confirm('Delete this category?')) return;
-    await catApi.delete(id);
-    setCatList((prev) => prev.filter((c) => c.id !== id));
+    try {
+      await catApi.delete(id);
+      setCatList((prev) => prev.filter((c) => c.id !== id));
+      showSuccess('已成功刪除');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '刪除失敗');
+    }
   }
 
   return (

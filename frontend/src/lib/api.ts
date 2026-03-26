@@ -115,8 +115,13 @@ export interface Photo {
 }
 
 export const albums = {
-  list: (all = false) =>
-    request<{ data: Album[] }>(`/api/albums${all ? '?all=true' : ''}`),
+  list: (all = false, sort?: 'date_desc' | 'date_asc') => {
+    const params = new URLSearchParams();
+    if (all) params.set('all', 'true');
+    if (sort) params.set('sort', sort);
+    const qs = params.toString();
+    return request<{ data: Album[] }>(`/api/albums${qs ? `?${qs}` : ''}`);
+  },
   get: (slug: string) =>
     request<{ data: Album & { photos: Photo[] } }>(`/api/albums/${slug}`),
   create: (data: Partial<Album>) =>

@@ -28,6 +28,11 @@ router.get('/', async (req, res) => {
       }
     }
     const whereClause = isAdmin ? '' : 'WHERE a.is_published = true';
+    const sort = req.query.sort;
+    let orderClause = 'ORDER BY a.shot_date DESC NULLS LAST';
+    if (sort === 'date_asc') {
+      orderClause = 'ORDER BY a.shot_date ASC NULLS LAST';
+    }
     const result = await pool.query(`
       SELECT a.*, c.name as category_name,
         p.url_thumbnail as cover_url
@@ -35,7 +40,7 @@ router.get('/', async (req, res) => {
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN photos p ON a.cover_photo_id = p.id
       ${whereClause}
-      ORDER BY a.sort_order, a.shot_date DESC
+      ${orderClause}
     `);
     res.json({ data: result.rows });
   } catch (err) {

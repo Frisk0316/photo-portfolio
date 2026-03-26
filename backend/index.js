@@ -6,6 +6,7 @@ import categoriesRoutes from './routes/categories.js';
 import albumsRoutes from './routes/albums.js';
 import photosRoutes from './routes/photos.js';
 import uploadRoutes from './routes/upload.js';
+import batchUploadRoutes from './routes/batch-upload.js';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/albums', albumsRoutes);
 app.use('/api/photos', photosRoutes);
 app.use('/api', photosRoutes); // also handles /api/albums/:albumId/photos
 app.use('/api/upload', uploadRoutes);
+app.use('/api/batch-upload', batchUploadRoutes);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

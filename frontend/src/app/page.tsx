@@ -13,16 +13,18 @@ export default function HomePage() {
   const [albumList, setAlbumList] = useState<Album[]>([]);
   const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const [sortOrder, setSortOrder] = useState<'date_desc' | 'date_asc'>('date_desc');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([albums.list(), categories.list()])
+    setLoading(true);
+    Promise.all([albums.list(false, sortOrder), categories.list()])
       .then(([a, c]) => {
         setAlbumList(a.data);
         setCategoryList(c.data);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [sortOrder]);
 
   const filtered = activeCategory
     ? albumList.filter((a) => a.category_id === activeCategory)
@@ -34,6 +36,8 @@ export default function HomePage() {
         categories={categoryList}
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
+        sortOrder={sortOrder}
+        onSortChange={setSortOrder}
       />
 
       <main className="px-6 pb-8">

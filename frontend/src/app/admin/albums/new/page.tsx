@@ -3,14 +3,22 @@
 import { useRouter } from 'next/navigation';
 import AlbumForm from '@/components/admin/AlbumForm';
 import { albums } from '@/lib/api';
+import { useToast } from '@/hooks/useToast';
 import type { Album } from '@/lib/api';
 
 export default function NewAlbumPage() {
   const router = useRouter();
+  const { showSuccess, showError } = useToast();
 
   async function handleCreate(data: Partial<Album>) {
-    const result = await albums.create(data);
-    router.push(`/admin/albums/${result.data.id}`);
+    try {
+      const result = await albums.create(data);
+      showSuccess('已順利儲存');
+      router.push(`/admin/albums/${result.data.id}`);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '儲存失敗');
+      throw err;
+    }
   }
 
   return (

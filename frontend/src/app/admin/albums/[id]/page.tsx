@@ -6,6 +6,7 @@ import Link from 'next/link';
 import AlbumForm from '@/components/admin/AlbumForm';
 import PhotoGrid from '@/components/admin/PhotoGrid';
 import { albums } from '@/lib/api';
+import { useToast } from '@/hooks/useToast';
 import type { Album, Photo } from '@/lib/api';
 
 export default function EditAlbumPage({ params }: { params: { id: string } }) {
@@ -26,10 +27,18 @@ export default function EditAlbumPage({ params }: { params: { id: string } }) {
     });
   }, [albumId, router]);
 
+  const { showSuccess, showError } = useToast();
+
   async function handleSave(data: Partial<Album>) {
     if (!album) return;
-    const updated = await albums.update(album.id, data);
-    setAlbum((prev) => prev ? { ...prev, ...updated.data } : prev);
+    try {
+      const updated = await albums.update(album.id, data);
+      setAlbum((prev) => prev ? { ...prev, ...updated.data } : prev);
+      showSuccess('已順利儲存');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '儲存失敗');
+      throw err;
+    }
   }
 
   if (loading) return <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading…</p>;
