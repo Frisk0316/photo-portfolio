@@ -11,6 +11,7 @@ import uploadRoutes from './routes/upload.js';
 import batchUploadRoutes from './routes/batch-upload.js';
 import contactRoutes from './routes/contact.js';
 import heroRoutes from './routes/hero.js';
+import serveRoutes from './routes/serve.js';
 
 const app = express();
 
@@ -37,6 +38,7 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+app.use('/api/serve', serveRoutes); // before rate limiter — images need higher throughput
 app.use('/api', globalLimiter);
 
 app.use(express.json({ limit: '10mb' }));

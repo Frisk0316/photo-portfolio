@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import BlurHashImage from '@/components/ui/BlurHashImage';
+import { watermarkedUrl } from '@/lib/api';
 import type { Photo } from '@/lib/api';
 
 interface GalleryImageProps {
@@ -45,7 +46,7 @@ export default function GalleryImage({
       {/* Actual image */}
       {inView && (
         <img
-          src={photo.url_thumbnail}
+          src={watermarkedUrl(photo.id, 'thumb')}
           alt={photo.caption || photo.file_name}
           draggable={false}
           className="absolute inset-0 w-full h-full object-cover transition-opacity duration-400 group-hover:scale-[1.02] transition-transform"

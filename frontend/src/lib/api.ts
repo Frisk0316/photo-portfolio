@@ -3,6 +3,11 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === 'l
   : '';
 
 
+// Watermarked image proxy URL
+export function watermarkedUrl(photoId: number, variant: 'thumb' | 'medium'): string {
+  return `${API_URL}/api/serve/${photoId}/${variant}`;
+}
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('admin_token');

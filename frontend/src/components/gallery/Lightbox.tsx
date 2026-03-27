@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import BlurHashImage from '@/components/ui/BlurHashImage';
 import { useTranslation } from '@/lib/i18n';
+import { watermarkedUrl } from '@/lib/api';
 import type { Photo } from '@/lib/api';
 
 interface LightboxProps {
@@ -263,7 +264,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         <AnimatePresence mode="wait">
           <motion.img
             key={photo.id}
-            src={photo.url_medium}
+            src={watermarkedUrl(photo.id, 'medium')}
             alt={photo.caption || photo.file_name}
             className="max-w-full max-h-full object-contain relative z-10 select-none"
             draggable={false}
