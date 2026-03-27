@@ -79,17 +79,19 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
         const keys = {
           original: `${prefix}/original/${baseName}.jpg`,
           thumbnail: `${prefix}/thumbnail/${baseName}.jpg`,
+          small: `${prefix}/small/${baseName}.jpg`,
           medium: `${prefix}/medium/${baseName}.jpg`,
           webp: `${prefix}/webp/${baseName}.webp`,
         };
 
         // Upload original (largest file)
         await uploadApi.putToWorker(workerUrl, keys.original, processed.original, 'image/jpeg');
-        updateFile(item.file, { progress: 40 });
+        updateFile(item.file, { progress: 35 });
 
         // Upload variants in parallel
         await Promise.all([
           uploadApi.putToWorker(workerUrl, keys.thumbnail, processed.thumbnail, 'image/jpeg'),
+          uploadApi.putToWorker(workerUrl, keys.small, processed.small, 'image/jpeg'),
           uploadApi.putToWorker(workerUrl, keys.medium, processed.medium, 'image/jpeg'),
           uploadApi.putToWorker(workerUrl, keys.webp, processed.webp, 'image/webp'),
         ]);
@@ -106,6 +108,7 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
           blurHash: processed.meta.blurHash,
           urlOriginal: `${publicBaseUrl}/${keys.original}`,
           urlThumbnail: `${publicBaseUrl}/${keys.thumbnail}`,
+          urlSmall: `${publicBaseUrl}/${keys.small}`,
           urlMedium: `${publicBaseUrl}/${keys.medium}`,
           urlWebp: `${publicBaseUrl}/${keys.webp}`,
           fileSize: processed.meta.fileSize,

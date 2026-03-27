@@ -13,11 +13,14 @@ interface AlbumFormProps {
 
 export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save' }: AlbumFormProps) {
   const [title, setTitle] = useState(initial.title || '');
+  const [titleEn, setTitleEn] = useState(initial.title_en || '');
   const [slug, setSlug] = useState(initial.slug || '');
   const [description, setDescription] = useState(initial.description || '');
+  const [descriptionEn, setDescriptionEn] = useState(initial.description_en || '');
   const [shotDate, setShotDate] = useState(initial.shot_date?.slice(0, 10) || '');
   const [categoryId, setCategoryId] = useState<string>(initial.category_id?.toString() || '');
   const [isPublished, setIsPublished] = useState(initial.is_published || false);
+  const [coverAspectRatio, setCoverAspectRatio] = useState(initial.cover_aspect_ratio || '4:3');
   const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +32,16 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
     setSlug(slugify(title));
   }, [title]);
 
+  const isDirty =
+    title !== (initial.title || '') ||
+    titleEn !== (initial.title_en || '') ||
+    description !== (initial.description || '') ||
+    descriptionEn !== (initial.description_en || '') ||
+    shotDate !== (initial.shot_date?.slice(0, 10) || '') ||
+    categoryId !== (initial.category_id?.toString() || '') ||
+    isPublished !== (initial.is_published || false) ||
+    coverAspectRatio !== (initial.cover_aspect_ratio || '4:3');
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -36,11 +49,14 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
     try {
       await onSubmit({
         title,
+        title_en: titleEn || undefined,
         slug,
         description: description || undefined,
+        description_en: descriptionEn || undefined,
         shot_date: shotDate || undefined,
         category_id: categoryId ? Number(categoryId) : undefined,
         is_published: isPublished,
+        cover_aspect_ratio: coverAspectRatio,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -63,6 +79,15 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
       </div>
 
       <div>
+        <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>Title (English)</label>
+        <input
+          type="text" value={titleEn} onChange={(e) => setTitleEn(e.target.value)}
+          placeholder="English title for i18n"
+          className={inputClass} style={inputStyle}
+        />
+      </div>
+
+      <div>
         <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
           Slug
         </label>
@@ -75,7 +100,16 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
       <div>
         <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>Description</label>
         <textarea
-          value={description} onChange={(e) => setDescription(e.target.value)} rows={4}
+          value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
+          className={inputClass} style={inputStyle}
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>Description (English)</label>
+        <textarea
+          value={descriptionEn} onChange={(e) => setDescriptionEn(e.target.value)} rows={3}
+          placeholder="English description for i18n"
           className={inputClass} style={inputStyle}
         />
       </div>
@@ -103,6 +137,27 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
         </div>
       </div>
 
+      <div>
+        <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>Cover Aspect Ratio</label>
+        <div className="flex gap-2">
+          {['4:3', '3:2', '16:9'].map((ratio) => (
+            <button
+              key={ratio}
+              type="button"
+              onClick={() => setCoverAspectRatio(ratio)}
+              className="px-3 py-1.5 rounded text-xs transition-colors"
+              style={{
+                background: coverAspectRatio === ratio ? 'var(--accent)' : 'var(--bg-elevated)',
+                color: coverAspectRatio === ratio ? '#0a0a0a' : 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {ratio}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <label className="flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)}
@@ -114,9 +169,9 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
       {error && <p className="text-xs text-red-400">{error}</p>}
 
       <button
-        type="submit" disabled={loading}
-        className="px-5 py-2.5 rounded text-sm font-medium"
-        style={{ background: 'var(--accent)', color: '#0a0a0a' }}
+        type="submit" disabled={loading || !isDirty}
+        className="px-5 py-2.5 rounded text-sm font-medium transition-opacity"
+        style={{ background: 'var(--accent)', color: '#0a0a0a', opacity: isDirty ? 1 : 0.4 }}
       >
         {loading ? 'Saving…' : submitLabel}
       </button>

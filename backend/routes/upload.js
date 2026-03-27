@@ -20,7 +20,7 @@ router.post('/register', requireAuth, async (req, res) => {
   try {
     const {
       albumId, fileName, width, height, aspectRatio, aspectCategory,
-      blurHash, urlOriginal, urlThumbnail, urlMedium, urlWebp,
+      blurHash, urlOriginal, urlThumbnail, urlSmall, urlMedium, urlWebp,
       fileSize, sortOrder = 0,
     } = req.body;
 
@@ -30,11 +30,11 @@ router.post('/register', requireAuth, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO photos (album_id, file_name, aspect_ratio, aspect_category, width, height,
-        blur_hash, url_original, url_thumbnail, url_medium, url_webp, file_size, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        blur_hash, url_original, url_thumbnail, url_small, url_medium, url_webp, file_size, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT DO NOTHING RETURNING *`,
       [albumId, fileName, aspectRatio, aspectCategory, width, height,
-       blurHash, urlOriginal, urlThumbnail, urlMedium, urlWebp,
+       blurHash, urlOriginal, urlThumbnail, urlSmall, urlMedium, urlWebp,
        fileSize, sortOrder]
     );
 

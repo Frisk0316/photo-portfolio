@@ -31,7 +31,12 @@ router.get('/', async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { name, description, sort_order = 0, section = 'other' } = req.body;
-    const slug = slugify(name);
+    let slug = slugify(name);
+    // If slug already exists, append section to make it unique
+    const existing = await pool.query('SELECT id FROM categories WHERE slug = $1', [slug]);
+    if (existing.rows.length > 0) {
+      slug = `${slug}-${slugify(section)}`;
+    }
     const result = await pool.query(
       'INSERT INTO categories (name, slug, description, sort_order, section) VALUES ($1,$2,$3,$4,$5) RETURNING *',
       [name, slug, description, sort_order, section]

@@ -11,6 +11,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { albums } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
+import { useToast } from '@/hooks/useToast';
 import type { Album } from '@/lib/api';
 
 function SortableAlbumRow({ album, onTogglePublish, onDelete }: {
@@ -40,6 +41,14 @@ function SortableAlbumRow({ album, onTogglePublish, onDelete }: {
       <td className="py-3 px-4 text-xs font-mono" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
         {album.photo_count}
       </td>
+      <td className="py-3 px-4 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+        {album.category_name || '—'}
+      </td>
+      <td className="py-3 px-4 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+        <span className={`px-2 py-0.5 rounded ${album.category_section === 'events' ? 'bg-blue-900/30 text-blue-400' : 'bg-white/5 text-white/40'}`}>
+          {album.category_section === 'events' ? 'Events' : 'Other'}
+        </span>
+      </td>
       <td className="py-3 px-4">
         <button
           onClick={() => onTogglePublish(album.id, !album.is_published)}
@@ -61,6 +70,7 @@ function SortableAlbumRow({ album, onTogglePublish, onDelete }: {
 export default function AdminDashboard() {
   const [albumList, setAlbumList] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
+  const { showSuccess, showError } = useToast();
 
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -70,6 +80,25 @@ export default function AdminDashboard() {
 
   const totalPhotos = albumList.reduce((sum, a) => sum + a.photo_count, 0);
   const publishedCount = albumList.filter((a) => a.is_published).length;
+  const draftCount = albumList.length - publishedCount;
+
+  async function handleBulkPublish() {
+    if (!draftCount || !confirm(`Publish all ${draftCount} draft albums?`)) return;
+    try {
+      await albums.bulkPublish();
+      setAlbumList((prev) => prev.map((a) => ({ ...a, is_published: true })));
+      showSuccess(`${draftCount} albums published`);
+    } catch { showError('Bulk publish failed'); }
+  }
+
+  async function handleBulkArchive() {
+    if (!publishedCount || !confirm(`Archive all ${publishedCount} published albums?`)) return;
+    try {
+      await albums.bulkArchive();
+      setAlbumList((prev) => prev.map((a) => ({ ...a, is_published: false })));
+      showSuccess(`${publishedCount} albums archived`);
+    } catch { showError('Bulk archive failed'); }
+  }
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -116,11 +145,29 @@ export default function AdminDashboard() {
       {/* Albums */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-sm" style={{ color: 'var(--text-secondary)' }}>Albums</h2>
-        <Link href="/admin/albums/new"
-          className="px-4 py-2 rounded text-sm"
-          style={{ background: 'var(--accent)', color: '#0a0a0a' }}>
-          + New Album
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleBulkPublish}
+            disabled={!draftCount}
+            className="px-3 py-2 rounded text-xs transition-opacity"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', opacity: draftCount ? 1 : 0.3 }}
+          >
+            Publish All
+          </button>
+          <button
+            onClick={handleBulkArchive}
+            disabled={!publishedCount}
+            className="px-3 py-2 rounded text-xs transition-opacity"
+            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', opacity: publishedCount ? 1 : 0.3 }}
+          >
+            Archive All
+          </button>
+          <Link href="/admin/albums/new"
+            className="px-4 py-2 rounded text-sm"
+            style={{ background: 'var(--accent)', color: '#0a0a0a' }}>
+            + New Album
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -135,6 +182,8 @@ export default function AdminDashboard() {
                 <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Title</th>
                 <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Date</th>
                 <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Photos</th>
+                <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Category</th>
+                <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Section</th>
                 <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Status</th>
                 <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Actions</th>
               </tr>

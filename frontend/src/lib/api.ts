@@ -96,6 +96,9 @@ export interface Album {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  title_en: string | null;
+  description_en: string | null;
+  cover_aspect_ratio: string;
   cover_url?: string;
   category_name?: string;
   category_section?: 'events' | 'other';
@@ -114,6 +117,7 @@ export interface Photo {
   blur_hash: string | null;
   url_original: string;
   url_thumbnail: string;
+  url_small: string | null;
   url_medium: string;
   url_webp: string;
   file_size: number | null;
@@ -140,6 +144,10 @@ export const albums = {
     request<{ data: { id: number } }>(`/api/albums/${id}`, { method: 'DELETE' }),
   reorder: (items: { id: number; sort_order: number }[]) =>
     request<{ data: { updated: number } }>('/api/albums/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
+  bulkPublish: () =>
+    request<{ data: { updated: number } }>('/api/albums/bulk-publish', { method: 'PUT' }),
+  bulkArchive: () =>
+    request<{ data: { updated: number } }>('/api/albums/bulk-archive', { method: 'PUT' }),
 };
 
 // Photos

@@ -3,6 +3,7 @@ import { encode } from 'blurhash';
 export interface ProcessedImage {
   original: File;
   thumbnail: Blob;
+  small: Blob;
   medium: Blob;
   webp: Blob;
   meta: {
@@ -15,6 +16,7 @@ export interface ProcessedImage {
 }
 
 const THUMBNAIL_HEIGHT = 400;
+const SMALL_WIDTH = 800;
 const MEDIUM_WIDTH = 1600;
 const JPEG_QUALITY = 0.85;
 const THUMBNAIL_QUALITY = 0.80;
@@ -78,16 +80,22 @@ export async function processImage(file: File): Promise<ProcessedImage> {
   const thumbW = Math.round(w * thumbScale);
   const thumbH = Math.round(h * thumbScale);
 
+  const smallScale = Math.min(1, SMALL_WIDTH / w);
+  const smallW = Math.round(w * smallScale);
+  const smallH = Math.round(h * smallScale);
+
   const medScale = Math.min(1, MEDIUM_WIDTH / w);
   const medW = Math.round(w * medScale);
   const medH = Math.round(h * medScale);
 
   // Generate variants
   const thumbCanvas = resizeToCanvas(img, thumbW, thumbH);
+  const smallCanvas = resizeToCanvas(img, smallW, smallH);
   const medCanvas = resizeToCanvas(img, medW, medH);
 
-  const [thumbnail, medium, webp] = await Promise.all([
+  const [thumbnail, small, medium, webp] = await Promise.all([
     canvasToBlob(thumbCanvas, 'image/jpeg', THUMBNAIL_QUALITY),
+    canvasToBlob(smallCanvas, 'image/jpeg', JPEG_QUALITY),
     canvasToBlob(medCanvas, 'image/jpeg', JPEG_QUALITY),
     canvasToBlob(medCanvas, 'image/webp', WEBP_QUALITY),
   ]);
@@ -100,6 +108,7 @@ export async function processImage(file: File): Promise<ProcessedImage> {
   return {
     original: file,
     thumbnail,
+    small,
     medium,
     webp,
     meta: {

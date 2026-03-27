@@ -10,7 +10,6 @@ import photosRoutes from './routes/photos.js';
 import uploadRoutes from './routes/upload.js';
 import batchUploadRoutes from './routes/batch-upload.js';
 import contactRoutes from './routes/contact.js';
-import downloadRoutes from './routes/download.js';
 import heroRoutes from './routes/hero.js';
 
 const app = express();
@@ -51,7 +50,6 @@ app.use('/api', photosRoutes); // also handles /api/albums/:albumId/photos
 app.use('/api/upload', uploadRoutes);
 app.use('/api/batch-upload', batchUploadRoutes);
 app.use('/api/contact', contactRoutes);
-app.use('/api/download', downloadRoutes);
 app.use('/api/hero-images', heroRoutes);
 
 // Health check

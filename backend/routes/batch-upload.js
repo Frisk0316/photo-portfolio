@@ -144,9 +144,10 @@ async function processImage(imagePath) {
   const metadata = await image.metadata();
   const { width, height } = metadata;
 
-  const [original, thumbnail, medium, webpFull, blurHash] = await Promise.all([
+  const [original, thumbnail, smallImg, medium, webpFull, blurHash] = await Promise.all([
     sharp(imagePath).jpeg({ quality: config.jpegQuality || 85, mozjpeg: true }).toBuffer(),
     sharp(imagePath).resize({ height: config.thumbnailHeight || 400, withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true }).toBuffer(),
+    sharp(imagePath).resize({ width: 800, withoutEnlargement: true }).jpeg({ quality: config.jpegQuality || 85, mozjpeg: true }).toBuffer(),
     sharp(imagePath).resize({ width: config.mediumWidth || 1600, withoutEnlargement: true }).jpeg({ quality: config.jpegQuality || 85, mozjpeg: true }).toBuffer(),
     sharp(imagePath).resize({ width: config.mediumWidth || 1600, withoutEnlargement: true }).webp({ quality: config.webpQuality || 82 }).toBuffer(),
     generateBlurHash(imagePath),
@@ -155,6 +156,7 @@ async function processImage(imagePath) {
   return {
     original: { buffer: original, size: original.length },
     thumbnail: { buffer: thumbnail, size: thumbnail.length },
+    small: { buffer: smallImg, size: smallImg.length },
     medium: { buffer: medium, size: medium.length },
     webp: { buffer: webpFull, size: webpFull.length },
     meta: { width, height, aspectRatio: Math.round((width / height) * 1000) / 1000, blurHash },
@@ -211,13 +213,14 @@ async function uploadToR2(key, buffer, contentType) {
 async function uploadImageVariants(albumSlug, fileName, processed) {
   const baseName = fileName.replace(/\.[^.]+$/, '');
   const prefix = `albums/${albumSlug}`;
-  const [original, thumbnail, medium, webp] = await Promise.all([
+  const [original, thumbnail, small, medium, webp] = await Promise.all([
     uploadToR2(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg'),
     uploadToR2(`${prefix}/thumbnail/${baseName}.jpg`, processed.thumbnail.buffer, 'image/jpeg'),
+    uploadToR2(`${prefix}/small/${baseName}.jpg`, processed.small.buffer, 'image/jpeg'),
     uploadToR2(`${prefix}/medium/${baseName}.jpg`, processed.medium.buffer, 'image/jpeg'),
     uploadToR2(`${prefix}/webp/${baseName}.webp`, processed.webp.buffer, 'image/webp'),
   ]);
-  return { original, thumbnail, medium, webp };
+  return { original, thumbnail, small, medium, webp };
 }
 
 // ── Routes ──
@@ -333,11 +336,11 @@ router.post('/execute', requireAuth, async (req, res) => {
 
           await pool.query(
             `INSERT INTO photos (album_id, file_name, aspect_ratio, aspect_category, width, height, blur_hash,
-              url_original, url_thumbnail, url_medium, url_webp, file_size, sort_order, exif_data)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT DO NOTHING`,
+              url_original, url_thumbnail, url_small, url_medium, url_webp, file_size, sort_order, exif_data)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT DO NOTHING`,
             [albumId, photo.fileName, processed.meta.aspectRatio, aspectCategory,
              processed.meta.width, processed.meta.height, processed.meta.blurHash,
-             urls.original.url, urls.thumbnail.url, urls.medium.url, urls.webp.url,
+             urls.original.url, urls.thumbnail.url, urls.small.url, urls.medium.url, urls.webp.url,
              processed.original.size, photo.sortOrder, exifData ? JSON.stringify(exifData) : null]
           );
 
