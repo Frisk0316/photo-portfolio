@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../services/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
+import { safeError } from '../utils/safeError.js';
 
 const router = Router();
 
@@ -16,10 +17,6 @@ function slugify(text) {
     .replace(/^-+|-+$/g, '');
 }
 
-function safeError(err) {
-  return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
-}
-
 // GET /api/albums
 router.get('/', async (req, res) => {
   try {
@@ -30,24 +27,36 @@ router.get('/', async (req, res) => {
         try {
           jwt.verify(authHeader.slice(7), config.jwtSecret);
           isAdmin = true;
-        } catch { /* invalid token — treat as guest */ }
+        } catch (err) {
+          console.warn(`[AUTH] Invalid JWT on album listing | ip=${req.ip || 'unknown'} error=${err.message}`);
+        }
       }
     }
-    const whereClause = isAdmin ? '' : 'WHERE a.is_published = true';
+    const conditions = [];
+    const params = [];
+    if (!isAdmin) {
+      conditions.push('a.is_published = true');
+    }
+    const section = req.query.section;
+    if (section) {
+      params.push(section);
+      conditions.push(`c.section = $${params.length}`);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const sort = req.query.sort;
     let orderClause = 'ORDER BY a.shot_date DESC NULLS LAST';
     if (sort === 'date_asc') {
       orderClause = 'ORDER BY a.shot_date ASC NULLS LAST';
     }
     const result = await pool.query(`
-      SELECT a.*, c.name as category_name,
+      SELECT a.*, c.name as category_name, c.section as category_section,
         p.url_medium as cover_url
       FROM albums a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN photos p ON a.cover_photo_id = p.id
       ${whereClause}
       ${orderClause}
-    `);
+    `, params);
     res.json({ data: result.rows });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
@@ -58,7 +67,7 @@ router.get('/', async (req, res) => {
 router.get('/:slug', async (req, res) => {
   try {
     const albumResult = await pool.query(`
-      SELECT a.*, c.name as category_name
+      SELECT a.*, c.name as category_name, c.section as category_section
       FROM albums a
       LEFT JOIN categories c ON a.category_id = c.id
       WHERE a.slug = $1

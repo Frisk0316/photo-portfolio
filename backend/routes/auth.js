@@ -16,6 +16,8 @@ const loginLimiter = rateLimit({
 router.post('/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
   if (username !== config.adminUsername || password !== config.adminPassword) {
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    console.warn(`[AUTH] Failed login attempt | user="${username || ''}" ip=${ip} time=${new Date().toISOString()}`);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   const token = jwt.sign({ username, role: 'admin' }, config.jwtSecret, { expiresIn: '7d' });

@@ -2,12 +2,9 @@ import { Router } from 'express';
 import pool from '../services/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
+import { safeError } from '../utils/safeError.js';
 
 const router = Router();
-
-function safeError(err) {
-  return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
-}
 
 // GET /api/upload/worker-url — return the Cloudflare Worker URL for R2 uploads
 router.get('/worker-url', requireAuth, (req, res) => {

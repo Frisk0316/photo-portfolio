@@ -33,7 +33,7 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
   }, []);
 
   const addFiles = useCallback((incoming: File[]) => {
-    const jpgs = incoming.filter((f) => /\.(jpe?g)$/i.test(f.name));
+    const jpgs = incoming.filter((f) => /\.(jpe?g)$/i.test(f.name) && f.type === 'image/jpeg');
     const items: UploadFile[] = jpgs.map((file) => ({
       file,
       preview: URL.createObjectURL(file),
@@ -63,7 +63,7 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
     setUploading(true);
 
     const results: Photo[] = [];
-    const publicBaseUrl = `https://photos.ospreay-photo.com`;
+    const publicBaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
 
     for (const item of pending) {
       try {

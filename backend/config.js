@@ -39,5 +39,24 @@ export const config = {
   mediumWidth: int('MEDIUM_WIDTH', 1600),
   webpQuality: int('WEBP_QUALITY', 82),
   jpegQuality: int('JPEG_QUALITY', 85),
-  allowedOrigins: optional('ALLOWED_ORIGINS', 'http://localhost:3000').split(',').map(s => s.trim()),
+  allowedOrigins: optional('ALLOWED_ORIGINS', '').split(',').map(s => s.trim()).filter(Boolean),
+  smtp: {
+    host: optional('SMTP_HOST', ''),
+    port: int('SMTP_PORT', 587),
+    user: optional('SMTP_USER', ''),
+    pass: optional('SMTP_PASS', ''),
+    notifyEmail: optional('NOTIFY_EMAIL', ''),
+  },
+  watermarkText: optional('WATERMARK_TEXT', 'Ospreay Photo'),
 };
+
+// Startup security warnings
+if (config.jwtSecret === 'change-this-to-a-random-string') {
+  console.warn('[SECURITY] JWT_SECRET is still the default placeholder — generate a strong secret with: openssl rand -hex 32');
+}
+if (config.adminPassword === 'change-this') {
+  console.warn('[SECURITY] ADMIN_PASSWORD is still the default placeholder — set a strong password (16+ characters)');
+}
+if (!config.allowedOrigins.length) {
+  console.warn('[SECURITY] ALLOWED_ORIGINS is empty — CORS will reject all cross-origin requests');
+}

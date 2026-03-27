@@ -1,0 +1,86 @@
+{
+  "common": {
+    "all": "全部",
+    "photos": "張照片",
+    "back": "返回",
+    "loading": "載入中...",
+    "noAlbums": "目前沒有相簿。",
+    "albumNotFound": "找不到相簿。"
+  },
+  "header": {
+    "home": "首頁",
+    "events": "活動攝影",
+    "gallery": "攝影作品",
+    "contact": "聯繫"
+  },
+  "hero": {
+    "eyebrow": "攝影",
+    "title": "作品集",
+    "subtitle": "用鏡頭紀錄每個精彩時刻。",
+    "exploreEvents": "活動攝影",
+    "exploreGallery": "攝影作品"
+  },
+  "sort": {
+    "newToOld": "新→舊",
+    "oldToNew": "舊→新",
+    "newToOldTitle": "新到舊",
+    "oldToNewTitle": "舊到新"
+  },
+  "lightbox": {
+    "exifTitle": "EXIF 資訊",
+    "pauseSlideshow": "暫停幻燈片",
+    "playSlideshow": "播放幻燈片",
+    "download": "下載照片",
+    "close": "關閉",
+    "previous": "上一張",
+    "next": "下一張"
+  },
+  "exif": {
+    "Make": "相機品牌",
+    "Model": "相機型號",
+    "LensModel": "鏡頭",
+    "FocalLength": "焦距",
+    "FNumber": "光圈",
+    "ExposureTime": "快門速度",
+    "ISO": "ISO",
+    "FocalLengthIn35mmFormat": "等效焦距"
+  },
+  "footer": {
+    "copyright": "© {year} Ospreay Photo. All rights reserved.",
+    "contact": "商業合作洽詢"
+  },
+  "contact": {
+    "title": "商業合作洽詢",
+    "subtitle": "歡迎與我們聯繫，討論您的攝影需求。",
+    "name": "姓名",
+    "namePlaceholder": "請輸入您的姓名",
+    "email": "電子信箱",
+    "emailPlaceholder": "your@email.com",
+    "phone": "電話（選填）",
+    "phonePlaceholder": "您的聯繫電話",
+    "inquiryType": "需求類型",
+    "inquiryTypes": {
+      "event": "活動攝影",
+      "portrait": "人像攝影",
+      "commercial": "商業攝影",
+      "other": "其他"
+    },
+    "selectType": "請選擇需求類型",
+    "message": "需求說明",
+    "messagePlaceholder": "請描述您的需求，包含活動日期、地點、預算等資訊...",
+    "submit": "送出",
+    "submitting": "送出中...",
+    "success": "感謝您的來信！我們會盡快回覆。",
+    "error": "送出失敗，請稍後再試。",
+    "required": "此欄位為必填",
+    "invalidEmail": "請輸入有效的電子信箱"
+  },
+  "events": {
+    "title": "活動攝影",
+    "subtitle": "專業活動紀錄，捕捉每個重要時刻。"
+  },
+  "gallery": {
+    "title": "攝影作品",
+    "subtitle": "各類攝影創作集錦。"
+  }
+}

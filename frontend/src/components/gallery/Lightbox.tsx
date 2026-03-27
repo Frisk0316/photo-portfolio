@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import BlurHashImage from '@/components/ui/BlurHashImage';
+import { useTranslation } from '@/lib/i18n';
 import type { Photo } from '@/lib/api';
 
 interface LightboxProps {
@@ -18,18 +19,14 @@ function formatExifValue(key: string, value: unknown): string | null {
   return v;
 }
 
-const EXIF_LABELS: Record<string, string> = {
-  Make: '相機品牌',
-  Model: '相機型號',
-  LensModel: '鏡頭',
-  FocalLength: '焦距',
-  FNumber: '光圈',
-  ExposureTime: '快門速度',
-  ISO: 'ISO',
-  FocalLengthIn35mmFormat: '等效焦距',
-};
+const EXIF_KEYS = ['Make', 'Model', 'LensModel', 'FocalLength', 'FNumber', 'ExposureTime', 'ISO', 'FocalLengthIn35mmFormat'];
+
+const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  ? 'http://localhost:4000'
+  : '';
 
 export default function Lightbox({ photos, initialIndex, onClose }: LightboxProps) {
+  const { t } = useTranslation();
   const [index, setIndex] = useState(initialIndex);
   const [loaded, setLoaded] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -116,7 +113,6 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
       resetZoom();
     } else {
       setScale(2);
-      // Zoom toward click point
       const rect = imageAreaRef.current?.getBoundingClientRect();
       if (rect) {
         const cx = e.clientX - rect.left - rect.width / 2;
@@ -153,13 +149,23 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
   // EXIF data
   const exifData = photo.exif_data as Record<string, unknown> | null;
   const exifEntries = exifData
-    ? Object.entries(EXIF_LABELS)
-        .map(([key, label]) => {
+    ? EXIF_KEYS
+        .map((key) => {
           const val = formatExifValue(key, exifData[key]);
-          return val ? { label, value: val } : null;
+          return val ? { label: t(`exif.${key}`), value: val } : null;
         })
         .filter(Boolean) as { label: string; value: string }[]
     : [];
+
+  const handleDownload = () => {
+    const url = `${API_URL}/api/download/${photo.id}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = photo.file_name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   return (
     <motion.div
@@ -175,10 +181,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         className="flex items-center justify-between px-6 py-4 shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <span
-          className="text-xs text-white/40"
-          style={{ fontFamily: 'var(--font-dm-mono)' }}
-        >
+        <span className="text-xs text-white/40" style={{ fontFamily: 'var(--font-dm-mono)' }}>
           {index + 1} / {photos.length}
         </span>
 
@@ -187,7 +190,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
           <button
             onClick={() => setIsPlaying((s) => !s)}
             className="text-white/40 hover:text-white transition-colors"
-            title={isPlaying ? '暫停幻燈片' : '播放幻燈片'}
+            title={isPlaying ? t('lightbox.pauseSlideshow') : t('lightbox.playSlideshow')}
           >
             {isPlaying ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -206,7 +209,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
             <button
               onClick={() => setShowExif((s) => !s)}
               className={`transition-colors text-sm ${showExif ? 'text-white' : 'text-white/40 hover:text-white'}`}
-              title="EXIF 資訊 (i)"
+              title={`${t('lightbox.exifTitle')} (i)`}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -216,11 +219,24 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
             </button>
           )}
 
+          {/* Download */}
+          <button
+            onClick={handleDownload}
+            className="text-white/40 hover:text-white transition-colors"
+            title={t('lightbox.download')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+
           {/* Close */}
           <button
             onClick={onClose}
             className="text-white/50 hover:text-white transition-colors text-2xl leading-none"
-            aria-label="Close"
+            aria-label={t('lightbox.close')}
           >
             ×
           </button>
@@ -240,7 +256,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onTouchStart={(e) => {
-          if (scale > 1) return; // Don't swipe when zoomed
+          if (scale > 1) return;
           setTouchStart(e.touches[0].clientX);
         }}
         onTouchEnd={(e) => {
@@ -282,6 +298,29 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
           />
         </AnimatePresence>
 
+        {/* Watermark overlay */}
+        <div
+          className="absolute inset-0 z-20 pointer-events-none select-none overflow-hidden"
+          aria-hidden="true"
+        >
+          {Array.from({ length: 12 }).map((_, i) => (
+            <span
+              key={i}
+              className="absolute text-white/[0.12] text-sm font-mono whitespace-nowrap"
+              style={{
+                fontFamily: 'var(--font-dm-mono)',
+                transform: 'rotate(-30deg)',
+                left: `${(i % 4) * 30 - 5}%`,
+                top: `${Math.floor(i / 4) * 38 + 5}%`,
+                fontSize: '13px',
+                letterSpacing: '0.1em',
+              }}
+            >
+              Ospreay Photo
+            </span>
+          ))}
+        </div>
+
         {/* EXIF Panel */}
         <AnimatePresence>
           {showExif && exifEntries.length > 0 && (
@@ -294,7 +333,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
               style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}
               onClick={(e) => e.stopPropagation()}
             >
-              <p className="text-xs text-white/60 mb-3 font-medium">EXIF 資訊</p>
+              <p className="text-xs text-white/60 mb-3 font-medium">{t('lightbox.exifTitle')}</p>
               {exifEntries.map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-4 text-xs">
                   <span className="text-white/40">{label}</span>
@@ -310,7 +349,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
           <button
             onClick={() => { setIsPlaying(false); prev(); }}
             className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-20"
-            aria-label="Previous"
+            aria-label={t('lightbox.previous')}
           >
             ‹
           </button>
@@ -321,7 +360,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
           <button
             onClick={() => { setIsPlaying(false); next(); }}
             className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all z-20"
-            aria-label="Next"
+            aria-label={t('lightbox.next')}
           >
             ›
           </button>

@@ -57,9 +57,32 @@ export default function GalleryImage({
         />
       )}
 
+      {/* Watermark overlay */}
+      <div
+        className="absolute inset-0 z-10 pointer-events-none select-none overflow-hidden"
+        aria-hidden="true"
+      >
+        {Array.from({ length: 4 }).map((_, i) => (
+          <span
+            key={i}
+            className="absolute text-white/[0.18] whitespace-nowrap"
+            style={{
+              fontFamily: 'var(--font-dm-mono)',
+              fontSize: '10px',
+              letterSpacing: '0.08em',
+              transform: 'rotate(-30deg)',
+              left: `${(i % 2) * 45 + 5}%`,
+              top: `${Math.floor(i / 2) * 50 + 20}%`,
+            }}
+          >
+            Ospreay Photo
+          </span>
+        ))}
+      </div>
+
       {/* Hover overlay */}
       {photo.caption && (
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-end p-3">
+        <div className="absolute inset-0 z-20 bg-black/0 group-hover:bg-black/40 transition-colors duration-300 flex items-end p-3">
           <p
             className="text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity duration-300 line-clamp-2"
             style={{ fontFamily: 'var(--font-dm-mono)' }}

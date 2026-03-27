@@ -2,12 +2,9 @@ import { Router } from 'express';
 import pool from '../services/db.js';
 import { deleteFromR2 } from '../services/r2.js';
 import { requireAuth } from '../middleware/auth.js';
+import { safeError } from '../utils/safeError.js';
 
 const router = Router();
-
-function safeError(err) {
-  return process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message;
-}
 
 // GET /api/albums/:albumId/photos
 router.get('/albums/:albumId/photos', async (req, res) => {

@@ -7,6 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 const navItems = [
   { href: '/admin', label: 'Dashboard' },
   { href: '/admin/categories', label: 'Categories' },
+  { href: '/admin/hero', label: 'Hero Carousel' },
+  { href: '/admin/contact', label: 'Contact Inbox' },
 ];
 
 export default function Sidebar() {
@@ -27,7 +29,7 @@ export default function Sidebar() {
         {navItems.map((item) => {
           const active = item.href === '/admin'
             ? pathname === '/admin' || pathname.startsWith('/admin/albums')
-            : pathname.startsWith(item.href);
+            : pathname === item.href || pathname.startsWith(item.href + '/');
           return (
             <Link
               key={item.href}

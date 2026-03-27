@@ -62,10 +62,14 @@ export interface Category {
   slug: string;
   description: string | null;
   sort_order: number;
+  section: 'events' | 'other';
 }
 
 export const categories = {
-  list: () => request<{ data: Category[] }>('/api/categories'),
+  list: (section?: 'events' | 'other') => {
+    const qs = section ? `?section=${section}` : '';
+    return request<{ data: Category[] }>(`/api/categories${qs}`);
+  },
   create: (data: Partial<Category>) =>
     request<{ data: Category }>('/api/categories', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Category>) =>
@@ -93,6 +97,8 @@ export interface Album {
   created_at: string;
   updated_at: string;
   cover_url?: string;
+  category_name?: string;
+  category_section?: 'events' | 'other';
 }
 
 export interface Photo {
@@ -116,10 +122,11 @@ export interface Photo {
 }
 
 export const albums = {
-  list: (all = false, sort?: 'date_desc' | 'date_asc') => {
+  list: (all = false, sort?: 'date_desc' | 'date_asc', section?: 'events' | 'other') => {
     const params = new URLSearchParams();
     if (all) params.set('all', 'true');
     if (sort) params.set('sort', sort);
+    if (section) params.set('section', section);
     const qs = params.toString();
     return request<{ data: Album[] }>(`/api/albums${qs ? `?${qs}` : ''}`);
   },
@@ -145,6 +152,49 @@ export const photos = {
     request<{ data: { deleted: number } }>('/api/photos/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   reorder: (albumId: number, items: { id: number; sort_order: number }[]) =>
     request<{ data: { updated: number } }>(`/api/albums/${albumId}/photos/reorder`, { method: 'PUT', body: JSON.stringify({ items }) }),
+};
+
+// Contact
+export interface ContactFormData {
+  name: string;
+  email: string;
+  phone?: string;
+  inquiryType?: string;
+  message: string;
+  locale?: string;
+}
+
+export const contact = {
+  submit: (data: ContactFormData) =>
+    request<{ data: { id: number } }>('/api/contact', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// Hero images
+export interface HeroImage {
+  id: number;
+  photo_id: number;
+  sort_order: number;
+  url_medium: string;
+  url_original: string;
+  blur_hash: string | null;
+  width: number;
+  height: number;
+  album_title: string;
+}
+
+export const heroImages = {
+  list: () => request<{ data: HeroImage[] }>('/api/hero-images'),
+  add: (photoId: number) =>
+    request<{ data: { id: number } }>('/api/hero-images', { method: 'POST', body: JSON.stringify({ photoId }) }),
+  remove: (id: number) =>
+    request<{ data: { id: number } }>(`/api/hero-images/${id}`, { method: 'DELETE' }),
+  reorder: (items: { id: number; sort_order: number }[]) =>
+    request<{ data: { updated: number } }>('/api/hero-images/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
+};
+
+// Download (watermarked)
+export const download = {
+  getUrl: (photoId: number) => `${API_URL}/api/download/${photoId}`,
 };
 
 // Upload — all R2 writes go through the Cloudflare Worker.

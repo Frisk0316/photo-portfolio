@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Playfair_Display, DM_Sans, DM_Mono } from 'next/font/google';
 import '@/styles/globals.css';
+import { I18nProvider } from '@/lib/i18n';
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -41,7 +42,7 @@ export default function RootLayout({
         <link rel="preconnect" href={process.env.NEXT_PUBLIC_R2_PUBLIC_URL || ''} />
       </head>
       <body className="font-sans bg-[var(--bg-primary)] text-[var(--text-primary)] antialiased">
-        {children}
+        <I18nProvider>{children}</I18nProvider>
       </body>
     </html>
   );

@@ -15,16 +15,17 @@ import type { Category } from '@/lib/api';
 
 function SortableCategoryRow({ cat, onSave, onDelete }: {
   cat: Category;
-  onSave: (id: number, name: string) => void;
+  onSave: (id: number, name: string, section: 'events' | 'other') => void;
   onDelete: (id: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(cat.name);
+  const [section, setSection] = useState<'events' | 'other'>(cat.section || 'other');
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: cat.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   async function save() {
-    await onSave(cat.id, name);
+    await onSave(cat.id, name, section);
     setEditing(false);
   }
 
@@ -51,6 +52,23 @@ function SortableCategoryRow({ cat, onSave, onDelete }: {
         {cat.slug}
       </td>
       <td className="py-3 px-4">
+        {editing ? (
+          <select
+            value={section}
+            onChange={e => setSection(e.target.value as 'events' | 'other')}
+            className="px-2 py-1 rounded text-xs outline-none"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+          >
+            <option value="events">Events</option>
+            <option value="other">Other</option>
+          </select>
+        ) : (
+          <span className={`text-xs px-2 py-0.5 rounded-full ${cat.section === 'events' ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-white/40'}`}>
+            {cat.section === 'events' ? 'Events' : 'Other'}
+          </span>
+        )}
+      </td>
+      <td className="py-3 px-4">
         <div className="flex gap-2">
           {editing ? (
             <>
@@ -70,6 +88,7 @@ function SortableCategoryRow({ cat, onSave, onDelete }: {
 export default function CategoriesPage() {
   const [catList, setCatList] = useState<Category[]>([]);
   const [newName, setNewName] = useState('');
+  const [newSection, setNewSection] = useState<'events' | 'other'>('other');
   const sensors = useSensors(useSensor(PointerSensor));
   const { showSuccess, showError } = useToast();
 
@@ -90,7 +109,7 @@ export default function CategoriesPage() {
   async function handleCreate() {
     if (!newName.trim()) return;
     try {
-      const result = await catApi.create({ name: newName.trim(), slug: slugify(newName.trim()) });
+      const result = await catApi.create({ name: newName.trim(), slug: slugify(newName.trim()), section: newSection });
       setCatList((prev) => [...prev, result.data]);
       setNewName('');
       showSuccess('已順利儲存');
@@ -99,10 +118,10 @@ export default function CategoriesPage() {
     }
   }
 
-  async function handleSave(id: number, name: string) {
+  async function handleSave(id: number, name: string, section: 'events' | 'other') {
     try {
-      await catApi.update(id, { name, slug: slugify(name) });
-      setCatList((prev) => prev.map((c) => c.id === id ? { ...c, name, slug: slugify(name) } : c));
+      await catApi.update(id, { name, slug: slugify(name), section });
+      setCatList((prev) => prev.map((c) => c.id === id ? { ...c, name, slug: slugify(name), section } : c));
       showSuccess('已順利儲存');
     } catch (err) {
       showError(err instanceof Error ? err.message : '儲存失敗');
@@ -134,6 +153,15 @@ export default function CategoriesPage() {
           className="px-3 py-2 rounded text-sm outline-none flex-1 max-w-xs"
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
         />
+        <select
+          value={newSection}
+          onChange={e => setNewSection(e.target.value as 'events' | 'other')}
+          className="px-3 py-2 rounded text-sm outline-none"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+        >
+          <option value="other">Other</option>
+          <option value="events">Events</option>
+        </select>
         <button onClick={handleCreate}
           className="px-4 py-2 rounded text-sm"
           style={{ background: 'var(--accent)', color: '#0a0a0a' }}>
@@ -148,6 +176,7 @@ export default function CategoriesPage() {
               <th className="py-3 px-4 w-8"></th>
               <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Name</th>
               <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Slug</th>
+              <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Section</th>
               <th className="py-3 px-4 text-left text-xs" style={{ color: 'var(--text-tertiary)' }}>Actions</th>
             </tr>
           </thead>

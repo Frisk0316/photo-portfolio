@@ -5,7 +5,7 @@ const nextConfig = {
       beforeFiles: [
         {
           source: '/api/:path*',
-          destination: 'https://determined-enthusiasm-production-22d1.up.railway.app/api/:path*',
+          destination: `${process.env.BACKEND_URL || 'http://localhost:4000'}/api/:path*`,
         },
       ],
     };

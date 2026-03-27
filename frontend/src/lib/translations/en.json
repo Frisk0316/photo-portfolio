@@ -1,0 +1,86 @@
+{
+  "common": {
+    "all": "All",
+    "photos": "photos",
+    "back": "Back",
+    "loading": "Loading...",
+    "noAlbums": "No albums yet.",
+    "albumNotFound": "Album not found."
+  },
+  "header": {
+    "home": "Home",
+    "events": "Events",
+    "gallery": "Gallery",
+    "contact": "Contact"
+  },
+  "hero": {
+    "eyebrow": "Photography",
+    "title": "Portfolio",
+    "subtitle": "Capturing every remarkable moment through the lens.",
+    "exploreEvents": "Event Photography",
+    "exploreGallery": "Gallery"
+  },
+  "sort": {
+    "newToOld": "New→Old",
+    "oldToNew": "Old→New",
+    "newToOldTitle": "Newest first",
+    "oldToNewTitle": "Oldest first"
+  },
+  "lightbox": {
+    "exifTitle": "EXIF Info",
+    "pauseSlideshow": "Pause slideshow",
+    "playSlideshow": "Play slideshow",
+    "download": "Download photo",
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "exif": {
+    "Make": "Camera Make",
+    "Model": "Camera Model",
+    "LensModel": "Lens",
+    "FocalLength": "Focal Length",
+    "FNumber": "Aperture",
+    "ExposureTime": "Shutter Speed",
+    "ISO": "ISO",
+    "FocalLengthIn35mmFormat": "35mm Equivalent"
+  },
+  "footer": {
+    "copyright": "© {year} Ospreay Photo. All rights reserved.",
+    "contact": "Business Inquiries"
+  },
+  "contact": {
+    "title": "Business Inquiries",
+    "subtitle": "Get in touch to discuss your photography needs.",
+    "name": "Name",
+    "namePlaceholder": "Your name",
+    "email": "Email",
+    "emailPlaceholder": "your@email.com",
+    "phone": "Phone (optional)",
+    "phonePlaceholder": "Your phone number",
+    "inquiryType": "Inquiry Type",
+    "inquiryTypes": {
+      "event": "Event Photography",
+      "portrait": "Portrait Photography",
+      "commercial": "Commercial Photography",
+      "other": "Other"
+    },
+    "selectType": "Select inquiry type",
+    "message": "Message",
+    "messagePlaceholder": "Describe your needs, including event date, location, budget, etc.",
+    "submit": "Submit",
+    "submitting": "Submitting...",
+    "success": "Thank you for reaching out! We'll get back to you soon.",
+    "error": "Submission failed. Please try again later.",
+    "required": "This field is required",
+    "invalidEmail": "Please enter a valid email address"
+  },
+  "events": {
+    "title": "Event Photography",
+    "subtitle": "Professional event coverage, capturing every important moment."
+  },
+  "gallery": {
+    "title": "Gallery",
+    "subtitle": "A curated collection of photography work."
+  }
+}
