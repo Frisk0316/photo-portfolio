@@ -3,7 +3,29 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@/lib/i18n';
-import type { HeroImage } from '@/lib/api';
+import type { HeroImage, HeroCropData } from '@/lib/api';
+
+function useMobileDetect() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
+function cropStyle(crop: HeroCropData | null): React.CSSProperties {
+  if (!crop || (crop.offsetX === 0 && crop.offsetY === 0 && crop.zoom === 1)) return {};
+  const posX = 50 + crop.offsetX * 50;
+  const posY = 50 + crop.offsetY * 50;
+  return {
+    objectPosition: `${posX}% ${posY}%`,
+    transform: `scale(${crop.zoom})`,
+    transformOrigin: `${posX}% ${posY}%`,
+  };
+}
 
 interface HeroCarouselProps {
   images: HeroImage[];
@@ -46,11 +68,14 @@ export default function HeroCarousel({ images }: HeroCarouselProps) {
   }
 
   const img = images[current];
+  const isMobile = useMobileDetect();
 
   return (
     <section className="relative h-screen overflow-hidden">
       {/* Background images */}
-      {images.map((image, i) => (
+      {images.map((image, i) => {
+        const activeCrop = isMobile ? image.crop_mobile : image.crop_desktop;
+        return (
         <div
           key={image.id}
           className="absolute inset-0 transition-opacity duration-700"
@@ -60,12 +85,14 @@ export default function HeroCarousel({ images }: HeroCarouselProps) {
             src={image.url_medium || image.url_original}
             alt={image.album_title}
             className="w-full h-full object-cover"
+            style={cropStyle(activeCrop)}
           />
           {/* Gradient overlay */}
           <div className="absolute inset-0"
             style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 100%)' }} />
         </div>
-      ))}
+        );
+      })}
 
       {/* Content overlay */}
       <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6">

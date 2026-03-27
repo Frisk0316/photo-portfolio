@@ -178,10 +178,18 @@ export const contact = {
 };
 
 // Hero images
+export interface HeroCropData {
+  offsetX: number;
+  offsetY: number;
+  zoom: number;
+}
+
 export interface HeroImage {
   id: number;
   photo_id: number;
   sort_order: number;
+  crop_desktop: HeroCropData | null;
+  crop_mobile: HeroCropData | null;
   url_medium: string;
   url_original: string;
   blur_hash: string | null;
@@ -198,6 +206,8 @@ export const heroImages = {
     request<{ data: { id: number } }>(`/api/hero-images/${id}`, { method: 'DELETE' }),
   reorder: (items: { id: number; sort_order: number }[]) =>
     request<{ data: { updated: number } }>('/api/hero-images/reorder', { method: 'PUT', body: JSON.stringify({ items }) }),
+  updateCrop: (id: number, crop_desktop: HeroCropData | null, crop_mobile: HeroCropData | null) =>
+    request<{ data: { id: number } }>(`/api/hero-images/${id}/crop`, { method: 'PUT', body: JSON.stringify({ crop_desktop, crop_mobile }) }),
 };
 
 // Download (watermarked)

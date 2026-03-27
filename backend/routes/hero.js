@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/hero-images — public
 router.get('/', async (req, res) => {
   const { rows } = await pool.query(`
-    SELECT hi.id, hi.photo_id, hi.sort_order,
+    SELECT hi.id, hi.photo_id, hi.sort_order, hi.crop_desktop, hi.crop_mobile,
            p.url_medium, p.url_original, p.blur_hash, p.width, p.height,
            a.title as album_title
     FROM hero_images hi
@@ -38,6 +38,16 @@ router.post('/', requireAuth, async (req, res) => {
 // DELETE /api/hero-images/:id — admin only
 router.delete('/:id', requireAuth, async (req, res) => {
   await pool.query(`DELETE FROM hero_images WHERE id = $1`, [req.params.id]);
+  res.json({ data: { id: parseInt(req.params.id) } });
+});
+
+// PUT /api/hero-images/:id/crop — admin only
+router.put('/:id/crop', requireAuth, async (req, res) => {
+  const { crop_desktop, crop_mobile } = req.body;
+  await pool.query(
+    `UPDATE hero_images SET crop_desktop = $1, crop_mobile = $2 WHERE id = $3`,
+    [crop_desktop ? JSON.stringify(crop_desktop) : null, crop_mobile ? JSON.stringify(crop_mobile) : null, req.params.id]
+  );
   res.json({ data: { id: parseInt(req.params.id) } });
 });
 

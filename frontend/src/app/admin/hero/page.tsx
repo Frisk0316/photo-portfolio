@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
 } from '@dnd-kit/core';
@@ -9,11 +9,15 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { heroImages, albums } from '@/lib/api';
-import type { HeroImage, Album, Photo } from '@/lib/api';
+import type { HeroImage, HeroCropData, Album, Photo } from '@/lib/api';
 
 const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
   ? 'http://localhost:4000'
   : '';
+
+const DEFAULT_CROP: HeroCropData = { offsetX: 0, offsetY: 0, zoom: 1 };
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
 
 function getToken() {
   if (typeof window === 'undefined') return null;
@@ -30,12 +34,225 @@ async function getAlbumPhotos(slug: string): Promise<Photo[]> {
   return json.data?.photos || [];
 }
 
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function cropToStyle(crop: HeroCropData | null): React.CSSProperties {
+  const c = crop || DEFAULT_CROP;
+  const posX = 50 + c.offsetX * 50;
+  const posY = 50 + c.offsetY * 50;
+  return {
+    objectPosition: `${posX}% ${posY}%`,
+    transform: `scale(${c.zoom})`,
+    transformOrigin: `${posX}% ${posY}%`,
+  };
+}
+
+/* ── Draggable crop viewport ── */
+function CropViewport({ label, ratio, crop, onChange, src, overlayTitle }: {
+  label: string;
+  ratio: string;
+  crop: HeroCropData;
+  onChange: (c: HeroCropData) => void;
+  src: string;
+  overlayTitle?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const dragCropStart = useRef({ x: 0, y: 0 });
+
+  const posX = 50 + crop.offsetX * 50;
+  const posY = 50 + crop.offsetY * 50;
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    setDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    dragCropStart.current = { x: crop.offsetX, y: crop.offsetY };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }, [crop.offsetX, crop.offsetY]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const sensitivity = Math.max(rect.width, rect.height) * crop.zoom * 0.5;
+    const dx = -(e.clientX - dragStart.current.x) / sensitivity;
+    const dy = -(e.clientY - dragStart.current.y) / sensitivity;
+    onChange({
+      ...crop,
+      offsetX: clamp(dragCropStart.current.x + dx, -1, 1),
+      offsetY: clamp(dragCropStart.current.y + dy, -1, 1),
+    });
+  }, [dragging, crop, onChange]);
+
+  const handlePointerUp = useCallback(() => setDragging(false), []);
+
+  return (
+    <div>
+      <p className="text-xs mb-1.5" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
+        {label}
+      </p>
+      <div
+        ref={containerRef}
+        className="w-full overflow-hidden rounded relative select-none"
+        style={{
+          aspectRatio: ratio,
+          background: 'var(--bg-elevated)',
+          border: '2px solid var(--border)',
+          cursor: dragging ? 'grabbing' : 'grab',
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        <img
+          src={src}
+          alt={label}
+          className="w-full h-full object-cover"
+          style={{
+            objectPosition: `${posX}% ${posY}%`,
+            transform: `scale(${crop.zoom})`,
+            transformOrigin: `${posX}% ${posY}%`,
+            transition: dragging ? 'none' : 'all 0.15s ease-out',
+            pointerEvents: 'none',
+          }}
+          draggable={false}
+        />
+        {/* Gradient overlay simulation */}
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 100%)' }} />
+        {overlayTitle && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-white" style={{ fontFamily: 'var(--font-playfair)', fontSize: ratio === '9/16' ? '14px' : '24px' }}>
+              {overlayTitle}
+            </span>
+          </div>
+        )}
+      </div>
+      {/* Zoom slider */}
+      <div className="flex items-center gap-2 mt-2">
+        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>−</span>
+        <input
+          type="range"
+          min={MIN_ZOOM}
+          max={MAX_ZOOM}
+          step={0.01}
+          value={crop.zoom}
+          onChange={(e) => onChange({ ...crop, zoom: parseFloat(e.target.value) })}
+          className="flex-1 accent-white h-1"
+        />
+        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>+</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Crop editor modal ── */
+function CropEditorModal({ img, onClose, onSaved }: {
+  img: HeroImage;
+  onClose: () => void;
+  onSaved: (updated: HeroImage) => void;
+}) {
+  const src = img.url_medium || img.url_original;
+  const [desktopCrop, setDesktopCrop] = useState<HeroCropData>(img.crop_desktop || DEFAULT_CROP);
+  const [mobileCrop, setMobileCrop] = useState<HeroCropData>(img.crop_mobile || DEFAULT_CROP);
+  const [saving, setSaving] = useState(false);
+
+  const hasChanges =
+    JSON.stringify(desktopCrop) !== JSON.stringify(img.crop_desktop || DEFAULT_CROP) ||
+    JSON.stringify(mobileCrop) !== JSON.stringify(img.crop_mobile || DEFAULT_CROP);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await heroImages.updateCrop(img.id, desktopCrop, mobileCrop);
+      onSaved({ ...img, crop_desktop: desktopCrop, crop_mobile: mobileCrop });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleReset() {
+    setDesktopCrop(DEFAULT_CROP);
+    setMobileCrop(DEFAULT_CROP);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
+      <div
+        className="max-w-5xl w-full space-y-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-dm-mono)' }}>
+            Crop & Position — {img.album_title}
+          </p>
+          <button onClick={onClose} className="text-white/50 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          Drag to pan, use slider to zoom. Desktop and mobile can be set independently.
+        </p>
+
+        {/* Two crop viewports side by side */}
+        <div className="flex gap-6 items-start">
+          {/* Desktop */}
+          <div className="flex-1 min-w-0">
+            <CropViewport
+              label="Desktop (16:9)"
+              ratio="16/9"
+              crop={desktopCrop}
+              onChange={setDesktopCrop}
+              src={src}
+              overlayTitle="Ospreay Photo"
+            />
+          </div>
+          {/* Mobile */}
+          <div className="w-36 shrink-0">
+            <CropViewport
+              label="Mobile (9:19.5)"
+              ratio="9/19.5"
+              crop={mobileCrop}
+              onChange={setMobileCrop}
+              src={src}
+              overlayTitle="Ospreay Photo"
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-center gap-3 text-xs">
+          <button
+            type="button"
+            onClick={handleReset}
+            style={{ color: 'var(--text-tertiary)' }}
+            className="hover:underline"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+            className="px-5 py-1.5 rounded font-medium disabled:opacity-40"
+            style={{ background: 'var(--accent)', color: '#0a0a0a' }}
+          >
+            {saving ? 'Saving...' : 'Save Crop'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Sortable thumbnail card ── */
-function SortableHeroCard({ img, index, onRemove, onPreview }: {
+function SortableHeroCard({ img, index, onRemove, onEdit }: {
   img: HeroImage;
   index: number;
   onRemove: (id: number) => void;
-  onPreview: (img: HeroImage) => void;
+  onEdit: (img: HeroImage) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: img.id });
   const style = {
@@ -44,6 +261,8 @@ function SortableHeroCard({ img, index, onRemove, onPreview }: {
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : 'auto' as string | number,
   };
+
+  const hasCrop = img.crop_desktop || img.crop_mobile;
 
   return (
     <div ref={setNodeRef} style={style} className="relative group flex flex-col items-center">
@@ -54,6 +273,17 @@ function SortableHeroCard({ img, index, onRemove, onPreview }: {
       >
         {index + 1}
       </span>
+
+      {/* Crop indicator */}
+      {hasCrop && (
+        <span
+          className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+          title="Has custom crop"
+        >
+          ✂
+        </span>
+      )}
 
       {/* Drag handle + image */}
       <div
@@ -73,84 +303,19 @@ function SortableHeroCard({ img, index, onRemove, onPreview }: {
       {/* Action buttons */}
       <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={() => onPreview(img)}
+          onClick={() => onEdit(img)}
           className="text-[10px] px-2 py-0.5 rounded"
           style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-          title="Preview"
         >
-          Preview
+          Crop
         </button>
         <button
           onClick={() => onRemove(img.id)}
           className="text-[10px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400"
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
-          title="Remove"
         >
           ×
         </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── Preview modal with desktop + mobile frames ── */
-function PreviewModal({ img, onClose }: { img: HeroImage; onClose: () => void }) {
-  const src = img.url_medium || img.url_original;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={onClose}>
-      <div
-        className="max-w-5xl w-full space-y-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm" style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-dm-mono)' }}>
-            Preview — {img.album_title}
-          </p>
-          <button onClick={onClose} className="text-white/50 hover:text-white text-xl leading-none">×</button>
-        </div>
-
-        <div className="flex gap-6 items-start justify-center">
-          {/* Desktop preview */}
-          <div className="flex-1 min-w-0">
-            <p className="text-xs mb-2" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
-              Desktop (16:9)
-            </p>
-            <div
-              className="w-full rounded overflow-hidden relative"
-              style={{ aspectRatio: '16/9', background: 'var(--bg-elevated)', border: '2px solid var(--border)' }}
-            >
-              <img src={src} alt="Desktop preview" className="w-full h-full object-cover" />
-              {/* Simulate gradient overlay like real carousel */}
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 100%)' }} />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-white text-2xl" style={{ fontFamily: 'var(--font-playfair)' }}>Ospreay Photo</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile preview */}
-          <div className="w-32 shrink-0">
-            <p className="text-xs mb-2" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
-              Mobile (9:16)
-            </p>
-            <div
-              className="w-full rounded-lg overflow-hidden relative"
-              style={{ aspectRatio: '9/16', background: 'var(--bg-elevated)', border: '2px solid var(--border)' }}
-            >
-              <img src={src} alt="Mobile preview" className="w-full h-full object-cover" />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 100%)' }} />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-white text-sm" style={{ fontFamily: 'var(--font-playfair)' }}>Ospreay Photo</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-xs text-center" style={{ color: 'var(--text-tertiary)' }}>
-          Images use <code className="text-white/50">object-cover</code> — the visible area depends on the photo's aspect ratio and the screen size.
-        </p>
       </div>
     </div>
   );
@@ -164,7 +329,7 @@ export default function AdminHeroPage() {
   const [albumPhotos, setAlbumPhotos] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [previewImg, setPreviewImg] = useState<HeroImage | null>(null);
+  const [editingImg, setEditingImg] = useState<HeroImage | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -202,6 +367,11 @@ export default function AdminHeroPage() {
     setHeroList(prev => prev.filter(h => h.id !== id));
   }
 
+  function handleCropSaved(updated: HeroImage) {
+    setHeroList(prev => prev.map(h => h.id === updated.id ? updated : h));
+    setEditingImg(null);
+  }
+
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -213,12 +383,10 @@ export default function AdminHeroPage() {
     const reordered = arrayMove(heroList, oldIndex, newIndex);
     setHeroList(reordered);
 
-    // Persist new order
     const items = reordered.map((h, i) => ({ id: h.id, sort_order: i }));
     try {
       await heroImages.reorder(items);
     } catch {
-      // Rollback on error
       const r = await heroImages.list();
       setHeroList(r.data);
     }
@@ -228,7 +396,7 @@ export default function AdminHeroPage() {
     <div className="p-6">
       <h1 className="text-xl mb-2" style={{ fontFamily: 'var(--font-playfair)' }}>Hero Carousel</h1>
       <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>
-        Select photos to display in the homepage carousel. Drag to reorder, click Preview to check viewport fit.
+        Drag to reorder. Click Crop to adjust position and zoom for desktop and mobile.
       </p>
 
       {/* Current hero images — sortable */}
@@ -248,7 +416,7 @@ export default function AdminHeroPage() {
                     img={img}
                     index={i}
                     onRemove={removeFromHero}
-                    onPreview={setPreviewImg}
+                    onEdit={setEditingImg}
                   />
                 ))}
               </div>
@@ -328,9 +496,13 @@ export default function AdminHeroPage() {
         )}
       </section>
 
-      {/* Preview modal */}
-      {previewImg && (
-        <PreviewModal img={previewImg} onClose={() => setPreviewImg(null)} />
+      {/* Crop editor modal */}
+      {editingImg && (
+        <CropEditorModal
+          img={editingImg}
+          onClose={() => setEditingImg(null)}
+          onSaved={handleCropSaved}
+        />
       )}
     </div>
   );
