@@ -50,7 +50,7 @@ router.get('/', async (req, res) => {
     }
     const result = await pool.query(`
       SELECT a.*, c.name as category_name, c.section as category_section,
-        p.url_medium as cover_url
+        COALESCE(p.url_medium, p.url_small, p.url_thumbnail) as cover_url
       FROM albums a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN photos p ON a.cover_photo_id = p.id
@@ -101,6 +101,30 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/albums/bulk-publish — set all draft albums to published
+router.put('/bulk-publish', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'UPDATE albums SET is_published = true, updated_at = NOW() WHERE is_published = false RETURNING id'
+    );
+    res.json({ data: { updated: result.rowCount } });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
+
+// PUT /api/albums/bulk-archive — set all published albums to draft
+router.put('/bulk-archive', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'UPDATE albums SET is_published = false, updated_at = NOW() WHERE is_published = true RETURNING id'
+    );
+    res.json({ data: { updated: result.rowCount } });
+  } catch (err) {
+    res.status(500).json({ error: safeError(err) });
+  }
+});
+
 // PUT /api/albums/reorder
 router.put('/reorder', requireAuth, async (req, res) => {
   const { items } = req.body;
@@ -123,7 +147,7 @@ router.put('/reorder', requireAuth, async (req, res) => {
 // PUT /api/albums/:id
 router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const { title, description, category_id, shot_date, is_published, cover_photo_id, cover_crop_data, sort_order } = req.body;
+    const { title, description, category_id, shot_date, is_published, cover_photo_id, cover_crop_data, sort_order, title_en, description_en, cover_aspect_ratio } = req.body;
     const slug = title ? slugify(title) : undefined;
     const result = await pool.query(
       `UPDATE albums SET
@@ -136,9 +160,12 @@ router.put('/:id', requireAuth, async (req, res) => {
         cover_photo_id = COALESCE($7, cover_photo_id),
         sort_order = COALESCE($8, sort_order),
         cover_crop_data = COALESCE($9, cover_crop_data),
+        title_en = COALESCE($10, title_en),
+        description_en = COALESCE($11, description_en),
+        cover_aspect_ratio = COALESCE($12, cover_aspect_ratio),
         updated_at = NOW()
-       WHERE id = $10 RETURNING *`,
-      [title, slug, description, category_id, shot_date, is_published, cover_photo_id, sort_order, cover_crop_data ? JSON.stringify(cover_crop_data) : null, req.params.id]
+       WHERE id = $13 RETURNING *`,
+      [title, slug, description, category_id, shot_date, is_published, cover_photo_id, sort_order, cover_crop_data ? JSON.stringify(cover_crop_data) : null, title_en, description_en, cover_aspect_ratio, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ data: result.rows[0] });

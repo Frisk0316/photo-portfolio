@@ -118,9 +118,10 @@ function SectionPreview({
 }
 
 function AlbumCard({ album, basePath }: { album: Album; basePath: string }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const slug = album.slug;
   const href = `${basePath}/${slug}`;
+  const displayTitle = locale === 'en' && album.title_en ? album.title_en : album.title;
 
   return (
     <Link
@@ -128,9 +129,10 @@ function AlbumCard({ album, basePath }: { album: Album; basePath: string }) {
       className="group block rounded overflow-hidden"
       style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
     >
-      <div className="aspect-[4/3] overflow-hidden bg-[var(--bg-elevated)] relative">
+      <div className="cover-container overflow-hidden bg-[var(--bg-elevated)] relative"
+        data-ratio={album.cover_aspect_ratio || '4:3'}>
         {album.cover_url ? (
-          <CoverImage url={album.cover_url} alt={album.title} cropData={album.cover_crop_data} />
+          <CoverImage url={album.cover_url} alt={displayTitle} cropData={album.cover_crop_data} />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-sm"
             style={{ color: 'var(--text-tertiary)' }}>
@@ -141,11 +143,11 @@ function AlbumCard({ album, basePath }: { album: Album; basePath: string }) {
       <div className="p-4">
         {album.shot_date && (
           <p className="text-xs mb-1" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
-            {formatDate(album.shot_date)}
+            {formatDate(album.shot_date, locale)}
           </p>
         )}
         <h3 className="text-base mb-1 group-hover:text-white transition-colors" style={{ fontFamily: 'var(--font-playfair)' }}>
-          {album.title}
+          {displayTitle}
         </h3>
         <p className="text-xs" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
           {album.photo_count} {t('common.photos')}
@@ -165,6 +167,7 @@ function CoverImage({ url, alt, cropData }: {
       <img
         src={url}
         alt={alt}
+        loading="lazy"
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
       />
     );
@@ -176,6 +179,7 @@ function CoverImage({ url, alt, cropData }: {
       <img
         src={url}
         alt={alt}
+        loading="lazy"
         className="w-full h-full object-cover"
         style={{
           objectPosition: `${posX}% ${posY}%`,

@@ -1,8 +1,33 @@
-export function formatDate(dateStr: string | null | undefined): string {
+export function formatDate(dateStr: string | null | undefined, locale: string = 'zh'): string {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return d.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
+  const loc = locale === 'en' ? 'en-US' : 'zh-TW';
+  return d.toLocaleDateString(loc, { year: 'numeric', month: 'long', day: 'numeric' });
 }
+
+const ASPECT_RATIOS: Record<string, string> = {
+  '4:3': '4/3',
+  '3:2': '3/2',
+  '16:9': '16/9',
+  '3:4': '3/4',
+  '9:16': '9/16',
+};
+
+// Desktop aspect ratio (default landscape)
+export function coverAspectStyle(ratio?: string): string {
+  return ASPECT_RATIOS[ratio || '4:3'] || '4/3';
+}
+
+// Mobile aspect ratio — portrait covers get taller display on mobile
+export function coverMobileAspectStyle(ratio?: string): string {
+  const r = ratio || '4:3';
+  // Portrait ratios stay as-is on mobile
+  if (r === '3:4' || r === '9:16') return ASPECT_RATIOS[r];
+  // Landscape ratios become squarer on mobile for better use of screen space
+  return '4/3';
+}
+
+export const COVER_ASPECT_OPTIONS = ['4:3', '3:2', '16:9', '3:4', '9:16'] as const;
 
 export function slugify(text: string): string {
   return text
