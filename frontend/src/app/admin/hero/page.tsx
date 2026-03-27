@@ -188,11 +188,14 @@ function CropEditorModal({ img, onClose, onSaved }: {
 }
 
 /* ── Sortable card ── */
-function SortableHeroCard({ img, index, onRemove, onEdit }: {
+function SortableHeroCard({ img, index, onRemove, onEdit, selectMode, selected, onToggleSelect }: {
   img: HeroImage;
   index: number;
   onRemove: (id: number) => void;
   onEdit: (img: HeroImage) => void;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: (id: number) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: img.id });
   const style = {
@@ -205,24 +208,54 @@ function SortableHeroCard({ img, index, onRemove, onEdit }: {
 
   return (
     <div ref={setNodeRef} style={style} className="relative group flex flex-col items-center">
-      <span className="absolute -top-2 -left-2 z-10 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono"
-        style={{ background: 'var(--accent)', color: '#0a0a0a' }}>{index + 1}</span>
-      {hasCrop && (
+      {/* Select checkbox */}
+      {selectMode && (
+        <button
+          onClick={() => onToggleSelect(img.id)}
+          className="absolute -top-2 -left-2 z-20 w-5 h-5 rounded flex items-center justify-center text-[10px]"
+          style={{
+            background: selected ? 'var(--accent)' : 'var(--bg-elevated)',
+            border: `2px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+            color: selected ? '#0a0a0a' : 'transparent',
+          }}
+        >
+          {selected ? '✓' : ''}
+        </button>
+      )}
+      {/* Order badge (only in non-select mode) */}
+      {!selectMode && (
+        <span className="absolute -top-2 -left-2 z-10 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono"
+          style={{ background: 'var(--accent)', color: '#0a0a0a' }}>{index + 1}</span>
+      )}
+      {hasCrop && !selectMode && (
         <span className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full flex items-center justify-center text-[10px]"
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }} title="Has custom crop">✂</span>
       )}
-      <div {...attributes} {...listeners}
-        className="cursor-grab active:cursor-grabbing rounded overflow-hidden"
-        style={{ outline: isDragging ? '2px solid var(--accent)' : 'none' }}>
-        <img src={img.url_medium || img.url_original} alt={img.album_title}
-          className="w-36 h-24 object-cover" draggable={false} />
-      </div>
-      <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={() => onEdit(img)} className="text-[10px] px-2 py-0.5 rounded"
-          style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Crop</button>
-        <button onClick={() => onRemove(img.id)} className="text-[10px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400"
-          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>×</button>
-      </div>
+      {selectMode ? (
+        <div
+          className="rounded overflow-hidden cursor-pointer"
+          style={{ outline: selected ? '2px solid var(--accent)' : '2px solid transparent' }}
+          onClick={() => onToggleSelect(img.id)}
+        >
+          <img src={img.url_medium || img.url_original} alt={img.album_title}
+            className="w-36 h-24 object-cover" draggable={false} />
+        </div>
+      ) : (
+        <>
+          <div {...attributes} {...listeners}
+            className="cursor-grab active:cursor-grabbing rounded overflow-hidden"
+            style={{ outline: isDragging ? '2px solid var(--accent)' : 'none' }}>
+            <img src={img.url_medium || img.url_original} alt={img.album_title}
+              className="w-36 h-24 object-cover" draggable={false} />
+          </div>
+          <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => onEdit(img)} className="text-[10px] px-2 py-0.5 rounded"
+              style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>Crop</button>
+            <button onClick={() => onRemove(img.id)} className="text-[10px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400"
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>×</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -238,11 +271,39 @@ function DeviceCarouselSection({ device, heroList, setHeroList, albumList, onEdi
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const isDesktop = device === 'desktop';
   const label = isDesktop ? 'Desktop (16:9)' : 'Mobile (9:19.5)';
   const icon = isDesktop ? '🖥' : '📱';
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  async function batchDelete() {
+    if (selectedIds.size === 0) return;
+    setDeleting(true);
+    try {
+      await Promise.all([...selectedIds].map(id => heroImages.remove(id)));
+      setHeroList(prev => prev.filter(h => !selectedIds.has(h.id)));
+      exitSelectMode();
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function loadAlbumPhotos(album: Album) {
     setSelectedAlbum(album);
@@ -283,22 +344,55 @@ function DeviceCarouselSection({ device, heroList, setHeroList, albumList, onEdi
 
   return (
     <section className="mb-12 p-5 rounded-lg" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-      <h2 className="text-sm mb-1 flex items-center gap-2" style={{ fontFamily: 'var(--font-dm-mono)' }}>
-        <span>{icon}</span> {label}
-      </h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm flex items-center gap-2" style={{ fontFamily: 'var(--font-dm-mono)' }}>
+          <span>{icon}</span> {label}
+        </h2>
+        {heroList.length > 0 && (
+          <div className="flex items-center gap-2">
+            {selectMode ? (
+              <>
+                <span className="text-[10px]" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
+                  {selectedIds.size} selected
+                </span>
+                <button onClick={() => { setSelectedIds(new Set(heroList.map(h => h.id))); }}
+                  className="text-[10px] px-2 py-0.5 rounded"
+                  style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                  Select all
+                </button>
+                <button onClick={batchDelete} disabled={selectedIds.size === 0 || deleting}
+                  className="text-[10px] px-2 py-0.5 rounded text-red-400 disabled:opacity-40"
+                  style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                  {deleting ? 'Deleting...' : `Delete (${selectedIds.size})`}
+                </button>
+                <button onClick={exitSelectMode} className="text-[10px] px-2 py-0.5 rounded"
+                  style={{ color: 'var(--text-tertiary)' }}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setSelectMode(true)} className="text-[10px] px-2 py-0.5 rounded"
+                style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                Select
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       <p className="text-xs mb-5" style={{ color: 'var(--text-tertiary)' }}>
-        {heroList.length} images — drag to reorder, hover for actions
+        {heroList.length} images{!selectMode && ' — drag to reorder, hover for actions'}
       </p>
 
       {/* Current images */}
       {heroList.length === 0 ? (
         <p className="text-xs mb-6" style={{ color: 'var(--text-tertiary)' }}>No images yet.</p>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={selectMode ? (() => {}) : handleDragEnd}>
           <SortableContext items={heroList.map(h => h.id)} strategy={rectSortingStrategy}>
             <div className="flex gap-4 flex-wrap mb-6">
               {heroList.map((img, i) => (
-                <SortableHeroCard key={img.id} img={img} index={i} onRemove={removeFromHero} onEdit={onEdit} />
+                <SortableHeroCard key={img.id} img={img} index={i} onRemove={removeFromHero} onEdit={onEdit}
+                  selectMode={selectMode} selected={selectedIds.has(img.id)} onToggleSelect={toggleSelect} />
               ))}
             </div>
           </SortableContext>
