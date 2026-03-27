@@ -4,33 +4,45 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /api/hero-images — public
+const HERO_SELECT = `
+  SELECT hi.id, hi.photo_id, hi.sort_order, hi.device, hi.crop_desktop, hi.crop_mobile,
+         p.url_medium, p.url_original, p.blur_hash, p.width, p.height,
+         a.title as album_title
+  FROM hero_images hi
+  JOIN photos p ON p.id = hi.photo_id
+  JOIN albums a ON a.id = p.album_id
+`;
+
+// GET /api/hero-images?device=desktop|mobile — public
 router.get('/', async (req, res) => {
-  const { rows } = await pool.query(`
-    SELECT hi.id, hi.photo_id, hi.sort_order, hi.crop_desktop, hi.crop_mobile,
-           p.url_medium, p.url_original, p.blur_hash, p.width, p.height,
-           a.title as album_title
-    FROM hero_images hi
-    JOIN photos p ON p.id = hi.photo_id
-    JOIN albums a ON a.id = p.album_id
-    ORDER BY hi.sort_order ASC
-  `);
+  const device = req.query.device;
+  let query = HERO_SELECT;
+  const params = [];
+
+  if (device === 'desktop' || device === 'mobile') {
+    query += ` WHERE hi.device = $1`;
+    params.push(device);
+  }
+  query += ` ORDER BY hi.sort_order ASC`;
+
+  const { rows } = await pool.query(query, params);
   res.json({ data: rows });
 });
 
 // POST /api/hero-images — admin only
 router.post('/', requireAuth, async (req, res) => {
-  const { photoId } = req.body;
+  const { photoId, device } = req.body;
   if (!photoId) return res.status(400).json({ error: 'photoId is required' });
+  const dev = device === 'mobile' ? 'mobile' : 'desktop';
 
   const { rows: existing } = await pool.query(
-    `SELECT MAX(sort_order) as max_order FROM hero_images`
+    `SELECT MAX(sort_order) as max_order FROM hero_images WHERE device = $1`, [dev]
   );
   const nextOrder = (existing[0].max_order ?? -1) + 1;
 
   const { rows } = await pool.query(
-    `INSERT INTO hero_images (photo_id, sort_order) VALUES ($1, $2) RETURNING id`,
-    [photoId, nextOrder]
+    `INSERT INTO hero_images (photo_id, sort_order, device) VALUES ($1, $2, $3) RETURNING id`,
+    [photoId, nextOrder, dev]
   );
   res.json({ data: { id: rows[0].id } });
 });

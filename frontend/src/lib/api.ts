@@ -193,6 +193,7 @@ export interface HeroImage {
   id: number;
   photo_id: number;
   sort_order: number;
+  device: 'desktop' | 'mobile';
   crop_desktop: HeroCropData | null;
   crop_mobile: HeroCropData | null;
   url_medium: string;
@@ -204,9 +205,10 @@ export interface HeroImage {
 }
 
 export const heroImages = {
-  list: () => request<{ data: HeroImage[] }>('/api/hero-images'),
-  add: (photoId: number) =>
-    request<{ data: { id: number } }>('/api/hero-images', { method: 'POST', body: JSON.stringify({ photoId }) }),
+  list: (device?: 'desktop' | 'mobile') =>
+    request<{ data: HeroImage[] }>(`/api/hero-images${device ? `?device=${device}` : ''}`),
+  add: (photoId: number, device: 'desktop' | 'mobile' = 'desktop') =>
+    request<{ data: { id: number } }>('/api/hero-images', { method: 'POST', body: JSON.stringify({ photoId, device }) }),
   remove: (id: number) =>
     request<{ data: { id: number } }>(`/api/hero-images/${id}`, { method: 'DELETE' }),
   reorder: (items: { id: number; sort_order: number }[]) =>

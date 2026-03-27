@@ -3,18 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '@/lib/i18n';
+import { heroImages } from '@/lib/api';
 import type { HeroImage, HeroCropData } from '@/lib/api';
-
-function useMobileDetect() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return isMobile;
-}
 
 function cropStyle(crop: HeroCropData | null): React.CSSProperties {
   if (!crop || (crop.offsetX === 0 && crop.offsetY === 0 && crop.zoom === 1)) return {};
@@ -27,14 +17,25 @@ function cropStyle(crop: HeroCropData | null): React.CSSProperties {
   };
 }
 
-interface HeroCarouselProps {
-  images: HeroImage[];
-}
-
-export default function HeroCarousel({ images }: HeroCarouselProps) {
+export default function HeroCarousel() {
   const { t } = useTranslation();
+  const [images, setImages] = useState<HeroImage[]>([]);
   const [current, setCurrent] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
+
+  // Detect mobile and fetch the correct set
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    const device = isMobile ? 'mobile' : 'desktop';
+    heroImages.list(device).then(r => {
+      // If the chosen device has no images, fall back to all images
+      if (r.data.length > 0) {
+        setImages(r.data);
+      } else {
+        heroImages.list().then(all => setImages(all.data));
+      }
+    }).catch(() => {});
+  }, []);
 
   const count = images.length;
 
@@ -48,6 +49,7 @@ export default function HeroCarousel({ images }: HeroCarouselProps) {
   }, [current, transitioning]);
 
   const next = useCallback(() => {
+    if (count < 2) return;
     goTo((current + 1) % count);
   }, [current, count, goTo]);
 
@@ -58,7 +60,6 @@ export default function HeroCarousel({ images }: HeroCarouselProps) {
   }, [next, count]);
 
   if (count === 0) {
-    // Fallback hero with no images
     return (
       <section className="relative h-screen flex items-center justify-center"
         style={{ background: 'var(--bg-primary)' }}>
@@ -67,30 +68,27 @@ export default function HeroCarousel({ images }: HeroCarouselProps) {
     );
   }
 
-  const img = images[current];
-  const isMobile = useMobileDetect();
-
   return (
     <section className="relative h-screen overflow-hidden">
       {/* Background images */}
       {images.map((image, i) => {
-        const activeCrop = isMobile ? image.crop_mobile : image.crop_desktop;
+        // Use the crop matching the image's device type
+        const activeCrop = image.device === 'mobile' ? image.crop_mobile : image.crop_desktop;
         return (
-        <div
-          key={image.id}
-          className="absolute inset-0 transition-opacity duration-700"
-          style={{ opacity: i === current && !transitioning ? 1 : 0 }}
-        >
-          <img
-            src={image.url_medium || image.url_original}
-            alt={image.album_title}
-            className="w-full h-full object-cover"
-            style={cropStyle(activeCrop)}
-          />
-          {/* Gradient overlay */}
-          <div className="absolute inset-0"
-            style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 100%)' }} />
-        </div>
+          <div
+            key={image.id}
+            className="absolute inset-0 transition-opacity duration-700"
+            style={{ opacity: i === current && !transitioning ? 1 : 0 }}
+          >
+            <img
+              src={image.url_medium || image.url_original}
+              alt={image.album_title}
+              className="w-full h-full object-cover"
+              style={cropStyle(activeCrop)}
+            />
+            <div className="absolute inset-0"
+              style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.55) 100%)' }} />
+          </div>
         );
       })}
 

@@ -5,19 +5,17 @@ import Link from 'next/link';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HeroCarousel from '@/components/home/HeroCarousel';
-import { heroImages, albums } from '@/lib/api';
+import { albums } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
-import type { Album, HeroImage } from '@/lib/api';
+import type { Album } from '@/lib/api';
 
 export default function HomePage() {
   const { t } = useTranslation();
-  const [carouselImages, setCarouselImages] = useState<HeroImage[]>([]);
   const [eventAlbums, setEventAlbums] = useState<Album[]>([]);
   const [otherAlbums, setOtherAlbums] = useState<Album[]>([]);
 
   useEffect(() => {
-    heroImages.list().then(r => setCarouselImages(r.data)).catch(() => {});
     albums.list(false, 'date_desc', 'events').then(r => setEventAlbums(r.data.slice(0, 3))).catch(() => {});
     albums.list(false, 'date_desc', 'other').then(r => setOtherAlbums(r.data.slice(0, 3))).catch(() => {});
   }, []);
@@ -26,8 +24,8 @@ export default function HomePage() {
     <>
       <Header />
 
-      {/* Hero carousel — full viewport */}
-      <HeroCarousel images={carouselImages} />
+      {/* Hero carousel — self-fetching, device-aware */}
+      <HeroCarousel />
 
       {/* Section previews */}
       <main className="px-6 pb-16">

@@ -1,0 +1,1 @@
+ALTER TABLE hero_images ADD COLUMN IF NOT EXISTS device VARCHAR(10) DEFAULT 'desktop';
