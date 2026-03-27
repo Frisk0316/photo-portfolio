@@ -64,8 +64,9 @@ export default function EditAlbumPage({ params }: { params: { id: string } }) {
             photos={album.photos}
             coverPhotoId={album.cover_photo_id}
             coverCropData={album.cover_crop_data}
-            onSave={async (coverPhotoId, cropData) => {
-              await handleSave({ cover_photo_id: coverPhotoId, cover_crop_data: cropData } as Partial<Album>);
+            coverAspectRatio={album.cover_aspect_ratio}
+            onSave={async (coverPhotoId, cropData, aspectRatio) => {
+              await handleSave({ cover_photo_id: coverPhotoId, cover_crop_data: cropData, cover_aspect_ratio: aspectRatio } as Partial<Album>);
             }}
           />
         </div>

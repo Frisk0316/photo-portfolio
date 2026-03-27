@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { COVER_ASPECT_OPTIONS, coverAspectStyle, coverMobileAspectStyle } from '@/lib/utils';
 import type { Photo } from '@/lib/api';
 
 export interface CoverCropData {
@@ -13,7 +14,8 @@ interface CoverEditorProps {
   photos: Photo[];
   coverPhotoId: number | null;
   coverCropData: CoverCropData | null;
-  onSave: (coverPhotoId: number, cropData: CoverCropData) => Promise<void>;
+  coverAspectRatio?: string;
+  onSave: (coverPhotoId: number, cropData: CoverCropData, aspectRatio: string) => Promise<void>;
 }
 
 const DEFAULT_CROP: CoverCropData = { offsetX: 0, offsetY: 0, zoom: 1 };
@@ -21,9 +23,10 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.01;
 
-export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSave }: CoverEditorProps) {
+export default function CoverEditor({ photos, coverPhotoId, coverCropData, coverAspectRatio, onSave }: CoverEditorProps) {
   const [selectedPhotoId, setSelectedPhotoId] = useState<number | null>(coverPhotoId);
   const [crop, setCrop] = useState<CoverCropData>(coverCropData || DEFAULT_CROP);
+  const [aspectRatio, setAspectRatio] = useState<string>(coverAspectRatio || '4:3');
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -64,11 +67,8 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
     if (!dragging || !selectedPhoto || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
 
-    // Sensitivity: how many pixels to drag to go from offset 0 to offset 1
-    // Higher zoom = more image area = need more precise dragging
     const sensitivity = Math.max(rect.width, rect.height) * crop.zoom * 0.5;
 
-    // Dragging right → image follows → show left side → offsetX decreases
     const dx = -(e.clientX - dragStart.x) / sensitivity;
     const dy = -(e.clientY - dragStart.y) / sensitivity;
 
@@ -88,7 +88,7 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
     if (!selectedPhotoId) return;
     setSaving(true);
     try {
-      await onSave(selectedPhotoId, crop);
+      await onSave(selectedPhotoId, crop, aspectRatio);
     } finally {
       setSaving(false);
     }
@@ -97,7 +97,8 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
   const hasChanges = selectedPhotoId !== coverPhotoId ||
     crop.offsetX !== (coverCropData?.offsetX ?? 0) ||
     crop.offsetY !== (coverCropData?.offsetY ?? 0) ||
-    crop.zoom !== (coverCropData?.zoom ?? 1);
+    crop.zoom !== (coverCropData?.zoom ?? 1) ||
+    aspectRatio !== (coverAspectRatio || '4:3');
 
   // Convert offset to CSS object-position & transform
   const posX = 50 + crop.offsetX * 50;
@@ -113,39 +114,108 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, onSav
 
   return (
     <div className="space-y-4">
-      {/* Preview area */}
+      {/* Aspect ratio selector */}
+      <div>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>
+          Cover aspect ratio
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {COVER_ASPECT_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setAspectRatio(opt)}
+              className="px-3 py-1 rounded text-xs transition-all"
+              style={{
+                background: aspectRatio === opt ? 'var(--accent)' : 'var(--bg-elevated)',
+                color: aspectRatio === opt ? '#0a0a0a' : 'var(--text-secondary)',
+                border: `1px solid ${aspectRatio === opt ? 'var(--accent)' : 'var(--border)'}`,
+                fontFamily: 'var(--font-dm-mono)',
+              }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Desktop & Mobile preview */}
       <div className="flex flex-col items-center gap-3">
-        <div
-          ref={containerRef}
-          className="aspect-[4/3] w-full max-w-md overflow-hidden rounded relative select-none"
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            cursor: selectedPhoto ? (dragging ? 'grabbing' : 'grab') : 'default',
-          }}
-          onPointerDown={selectedPhoto ? handlePointerDown : undefined}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-        >
-          {selectedPhoto ? (
-            <img
-              src={selectedPhoto.url_medium || selectedPhoto.url_thumbnail}
-              alt="Cover preview"
-              className="w-full h-full object-cover"
-              style={imageStyle}
-              draggable={false}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-sm"
-              style={{ color: 'var(--text-tertiary)' }}>
-              Select a photo as cover
+        <div className="flex gap-4 w-full max-w-2xl">
+          {/* Desktop preview */}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs mb-1.5" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
+              Desktop
+            </p>
+            <div
+              ref={containerRef}
+              className="w-full overflow-hidden rounded relative select-none"
+              style={{
+                aspectRatio: coverAspectStyle(aspectRatio),
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                cursor: selectedPhoto ? (dragging ? 'grabbing' : 'grab') : 'default',
+              }}
+              onPointerDown={selectedPhoto ? handlePointerDown : undefined}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+            >
+              {selectedPhoto ? (
+                <img
+                  src={selectedPhoto.url_medium || selectedPhoto.url_thumbnail}
+                  alt="Cover preview"
+                  className="w-full h-full object-cover"
+                  style={imageStyle}
+                  draggable={false}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-sm"
+                  style={{ color: 'var(--text-tertiary)' }}>
+                  Select a photo as cover
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Mobile preview */}
+          <div className="w-24 shrink-0">
+            <p className="text-xs mb-1.5" style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-dm-mono)' }}>
+              Mobile
+            </p>
+            <div
+              className="w-full overflow-hidden rounded relative"
+              style={{
+                aspectRatio: coverMobileAspectStyle(aspectRatio),
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {selectedPhoto ? (
+                <img
+                  src={selectedPhoto.url_small || selectedPhoto.url_thumbnail}
+                  alt="Mobile preview"
+                  className="w-full h-full object-cover"
+                  style={{
+                    objectPosition: `${posX}% ${posY}%`,
+                    transform: `scale(${crop.zoom})`,
+                    transformOrigin: `${posX}% ${posY}%`,
+                    pointerEvents: 'none' as const,
+                  }}
+                  draggable={false}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-[10px]"
+                  style={{ color: 'var(--text-tertiary)' }}>
+                  —
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Zoom controls */}
         {selectedPhoto && (
-          <div className="flex items-center gap-3 w-full max-w-md">
+          <div className="flex items-center gap-3 w-full max-w-2xl">
             <button
               type="button"
               onClick={() => handleZoomChange(crop.zoom - 0.1)}
