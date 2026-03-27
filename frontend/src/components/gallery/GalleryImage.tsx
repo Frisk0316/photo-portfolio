@@ -28,7 +28,8 @@ export default function GalleryImage({
     <div
       ref={ref}
       className="relative overflow-hidden cursor-pointer group"
-      style={{ width: displayWidth, height: displayHeight, flexShrink: 0 }}
+      style={{ width: displayWidth, height: displayHeight, flexShrink: 0, WebkitTouchCallout: 'none' } as React.CSSProperties}
+      onContextMenu={(e) => e.preventDefault()}
       onClick={onClick}
     >
       {/* BlurHash placeholder */}
@@ -46,6 +47,7 @@ export default function GalleryImage({
         <img
           src={photo.url_thumbnail}
           alt={photo.caption || photo.file_name}
+          draggable={false}
           className="absolute inset-0 w-full h-full object-cover transition-opacity duration-400 group-hover:scale-[1.02] transition-transform"
           style={{
             opacity: loaded ? 1 : 0,
@@ -56,29 +58,6 @@ export default function GalleryImage({
           loading="lazy"
         />
       )}
-
-      {/* Watermark overlay */}
-      <div
-        className="absolute inset-0 z-10 pointer-events-none select-none overflow-hidden"
-        aria-hidden="true"
-      >
-        {Array.from({ length: 4 }).map((_, i) => (
-          <span
-            key={i}
-            className="absolute text-white/[0.18] whitespace-nowrap"
-            style={{
-              fontFamily: 'var(--font-dm-mono)',
-              fontSize: '10px',
-              letterSpacing: '0.08em',
-              transform: 'rotate(-30deg)',
-              left: `${(i % 2) * 45 + 5}%`,
-              top: `${Math.floor(i / 2) * 50 + 20}%`,
-            }}
-          >
-            Ospreay Photo
-          </span>
-        ))}
-      </div>
 
       {/* Hover overlay */}
       {photo.caption && (

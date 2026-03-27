@@ -157,16 +157,6 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         .filter(Boolean) as { label: string; value: string }[]
     : [];
 
-  const handleDownload = () => {
-    const url = `${API_URL}/api/download/${photo.id}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = photo.file_name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -174,6 +164,8 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
       className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+      style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}
+      onContextMenu={(e) => e.preventDefault()}
       onClick={onClose}
     >
       {/* Top bar */}
@@ -218,19 +210,6 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
               </svg>
             </button>
           )}
-
-          {/* Download */}
-          <button
-            onClick={handleDownload}
-            className="text-white/40 hover:text-white transition-colors"
-            title={t('lightbox.download')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </button>
 
           {/* Close */}
           <button
@@ -297,29 +276,6 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
             onLoad={() => setLoaded(true)}
           />
         </AnimatePresence>
-
-        {/* Watermark overlay */}
-        <div
-          className="absolute inset-0 z-20 pointer-events-none select-none overflow-hidden"
-          aria-hidden="true"
-        >
-          {Array.from({ length: 12 }).map((_, i) => (
-            <span
-              key={i}
-              className="absolute text-white/[0.12] text-sm font-mono whitespace-nowrap"
-              style={{
-                fontFamily: 'var(--font-dm-mono)',
-                transform: 'rotate(-30deg)',
-                left: `${(i % 4) * 30 - 5}%`,
-                top: `${Math.floor(i / 4) * 38 + 5}%`,
-                fontSize: '13px',
-                letterSpacing: '0.1em',
-              }}
-            >
-              Ospreay Photo
-            </span>
-          ))}
-        </div>
 
         {/* EXIF Panel */}
         <AnimatePresence>
