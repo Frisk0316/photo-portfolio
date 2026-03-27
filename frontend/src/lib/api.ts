@@ -237,6 +237,7 @@ export const upload = {
     blurHash: string | null;
     urlOriginal: string;
     urlThumbnail: string;
+    urlSmall: string;
     urlMedium: string;
     urlWebp: string;
     fileSize: number;
