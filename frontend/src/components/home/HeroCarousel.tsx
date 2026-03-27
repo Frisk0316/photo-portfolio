@@ -73,7 +73,7 @@ export default function HeroCarousel() {
       {/* Background images */}
       {images.map((image, i) => {
         // Use the crop matching the image's device type
-        const activeCrop = image.device === 'mobile' ? image.crop_mobile : image.crop_desktop;
+        const activeCrop = image.device === 'mobile' ? image.crop_mobile : (image.crop_desktop || null);
         return (
           <div
             key={image.id}

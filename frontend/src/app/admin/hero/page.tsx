@@ -124,7 +124,7 @@ function CropEditorModal({ img, onClose, onSaved }: {
   onSaved: (updated: HeroImage) => void;
 }) {
   const src = img.url_medium || img.url_original;
-  const isDesktop = img.device === 'desktop';
+  const isDesktop = img.device !== 'mobile'; // default to desktop if device is missing
 
   // For desktop images, only show desktop crop; for mobile, only mobile crop
   const initialCrop = isDesktop ? (img.crop_desktop || DEFAULT_CROP) : (img.crop_mobile || DEFAULT_CROP);
@@ -201,7 +201,7 @@ function SortableHeroCard({ img, index, onRemove, onEdit }: {
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : 'auto' as string | number,
   };
-  const hasCrop = img.device === 'desktop' ? img.crop_desktop : img.crop_mobile;
+  const hasCrop = img.device !== 'mobile' ? img.crop_desktop : img.crop_mobile;
 
   return (
     <div ref={setNodeRef} style={style} className="relative group flex flex-col items-center">

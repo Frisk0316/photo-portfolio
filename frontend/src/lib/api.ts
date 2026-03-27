@@ -193,7 +193,7 @@ export interface HeroImage {
   id: number;
   photo_id: number;
   sort_order: number;
-  device: 'desktop' | 'mobile';
+  device?: 'desktop' | 'mobile';
   crop_desktop: HeroCropData | null;
   crop_mobile: HeroCropData | null;
   url_medium: string;
