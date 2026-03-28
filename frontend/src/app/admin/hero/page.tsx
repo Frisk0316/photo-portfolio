@@ -297,7 +297,7 @@ function DeviceCarouselSection({ device, heroList, setHeroList, albumList, onEdi
     if (selectedIds.size === 0) return;
     setDeleting(true);
     try {
-      await Promise.all([...selectedIds].map(id => heroImages.remove(id)));
+      await Promise.all(Array.from(selectedIds).map(id => heroImages.remove(id)));
       setHeroList(prev => prev.filter(h => !selectedIds.has(h.id)));
       exitSelectMode();
     } finally {
