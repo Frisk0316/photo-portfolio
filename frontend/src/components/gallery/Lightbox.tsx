@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import BlurHashImage from '@/components/ui/BlurHashImage';
 import { useTranslation } from '@/lib/i18n';
-import { watermarkedUrl } from '@/lib/api';
 import type { Photo } from '@/lib/api';
 
 interface LightboxProps {
@@ -21,10 +20,6 @@ function formatExifValue(key: string, value: unknown): string | null {
 }
 
 const EXIF_KEYS = ['Make', 'Model', 'LensModel', 'FocalLength', 'FNumber', 'ExposureTime', 'ISO', 'FocalLengthIn35mmFormat'];
-
-const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-  ? 'http://localhost:4000'
-  : '';
 
 export default function Lightbox({ photos, initialIndex, onClose }: LightboxProps) {
   const { t } = useTranslation();
@@ -47,6 +42,20 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const photo = photos[index];
+
+  // Preload adjacent images for faster navigation
+  useEffect(() => {
+    const preloadIndices = [
+      (index + 1) % photos.length,
+      (index - 1 + photos.length) % photos.length,
+    ];
+    preloadIndices.forEach((i) => {
+      if (i !== index) {
+        const img = new Image();
+        img.src = photos[i].url_medium;
+      }
+    });
+  }, [index, photos]);
 
   const resetZoom = useCallback(() => {
     setScale(1);
@@ -264,7 +273,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         <AnimatePresence mode="wait">
           <motion.img
             key={photo.id}
-            src={watermarkedUrl(photo.id, 'medium')}
+            src={photo.url_medium}
             alt={photo.caption || photo.file_name}
             className="max-w-full max-h-full object-contain relative z-10 select-none"
             draggable={false}
@@ -277,6 +286,16 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
             onLoad={() => setLoaded(true)}
           />
         </AnimatePresence>
+
+        {/* Watermark overlay */}
+        <div className="absolute bottom-8 left-0 right-0 z-20 text-center pointer-events-none select-none">
+          <span
+            className="text-white/25 text-sm"
+            style={{ fontFamily: 'var(--font-dancing)' }}
+          >
+            Ospreay Photo
+          </span>
+        </div>
 
         {/* EXIF Panel */}
         <AnimatePresence>

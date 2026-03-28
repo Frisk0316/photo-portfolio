@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import BlurHashImage from '@/components/ui/BlurHashImage';
-import { watermarkedUrl } from '@/lib/api';
 import type { Photo } from '@/lib/api';
 
 interface GalleryImageProps {
@@ -46,7 +45,7 @@ export default function GalleryImage({
       {/* Actual image */}
       {inView && (
         <img
-          src={watermarkedUrl(photo.id, 'thumb')}
+          src={photo.url_thumbnail}
           alt={photo.caption || photo.file_name}
           draggable={false}
           className="absolute inset-0 w-full h-full object-cover transition-opacity duration-400 group-hover:scale-[1.02] transition-transform"
@@ -59,6 +58,16 @@ export default function GalleryImage({
           loading="lazy"
         />
       )}
+
+      {/* Watermark */}
+      <div className="absolute bottom-2 left-0 right-0 z-10 text-center pointer-events-none select-none">
+        <span
+          className="text-white/30 text-[10px]"
+          style={{ fontFamily: 'var(--font-dancing)' }}
+        >
+          Ospreay Photo
+        </span>
+      </div>
 
       {/* Hover overlay */}
       {photo.caption && (

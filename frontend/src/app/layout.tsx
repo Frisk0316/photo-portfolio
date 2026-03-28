@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Playfair_Display, DM_Sans, DM_Mono } from 'next/font/google';
+import { Playfair_Display, DM_Sans, DM_Mono, Dancing_Script } from 'next/font/google';
 import '@/styles/globals.css';
 import { I18nProvider } from '@/lib/i18n';
 
@@ -21,6 +21,12 @@ const dmMono = DM_Mono({
   variable: '--font-dm-mono',
 });
 
+const dancingScript = Dancing_Script({
+  subsets: ['latin'],
+  weight: ['400'],
+  variable: '--font-dancing',
+});
+
 export const metadata: Metadata = {
   title: 'Photography Portfolio',
   description: 'A curated photography portfolio',
@@ -37,7 +43,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-TW" className={`${playfair.variable} ${dmSans.variable} ${dmMono.variable}`}>
+    <html lang="zh-TW" className={`${playfair.variable} ${dmSans.variable} ${dmMono.variable} ${dancingScript.variable}`}>
       <head>
         <link rel="preconnect" href={process.env.NEXT_PUBLIC_R2_PUBLIC_URL || ''} />
       </head>

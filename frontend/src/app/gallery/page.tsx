@@ -92,8 +92,7 @@ function AlbumCard({ album }: { album: Album }) {
       className="group block rounded overflow-hidden"
       style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
     >
-      <div className="cover-container overflow-hidden bg-[var(--bg-elevated)] relative"
-        data-ratio={album.cover_aspect_ratio || '4:3'}>
+      <div className="cover-container overflow-hidden bg-[var(--bg-elevated)] relative">
         {album.cover_url ? (
           <CoverImage url={album.cover_url} alt={displayTitle} cropData={album.cover_crop_data} />
         ) : (

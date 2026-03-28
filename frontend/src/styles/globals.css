@@ -49,16 +49,7 @@ a {
   border-radius: 2px;
 }
 
-/* Cover aspect ratios — desktop uses configured ratio */
-.cover-container { aspect-ratio: 4/3; }
-.cover-container[data-ratio="3:2"] { aspect-ratio: 3/2; }
-.cover-container[data-ratio="16:9"] { aspect-ratio: 16/9; }
-.cover-container[data-ratio="3:4"] { aspect-ratio: 3/4; }
-.cover-container[data-ratio="9:16"] { aspect-ratio: 9/16; }
-
-/* Mobile: portrait ratios clamp to 3:4, landscape ratios normalize to 4:3 */
-@media (max-width: 639px) {
-  .cover-container { aspect-ratio: 4/3; }
-  .cover-container[data-ratio="3:4"],
-  .cover-container[data-ratio="9:16"] { aspect-ratio: 3/4; }
+/* Cover aspect ratio — uniform 4:3 */
+.cover-container {
+  aspect-ratio: 4/3;
 }
