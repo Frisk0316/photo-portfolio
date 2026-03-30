@@ -271,31 +271,43 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         )}
 
         <AnimatePresence mode="wait">
-          <motion.img
+          {/* Wrapper shrinks to actual image size so watermark follows the image */}
+          <motion.div
             key={photo.id}
-            src={photo.url_medium}
-            alt={photo.caption || photo.file_name}
-            className="max-w-full max-h-full object-contain relative z-10 select-none"
-            draggable={false}
+            className="relative z-10 select-none"
             style={{
+              display: 'inline-block',
+              maxWidth: '100%',
+              maxHeight: '100%',
               transform: `scale(${scale}) translate(${translate.x / scale}px, ${translate.y / scale}px)`,
               transition: isDragging ? 'none' : 'transform 0.2s ease-out',
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: loaded ? 1 : 0 }}
-            onLoad={() => setLoaded(true)}
-          />
-        </AnimatePresence>
-
-        {/* Watermark overlay */}
-        <div className="absolute bottom-8 left-0 right-0 z-20 text-center pointer-events-none select-none">
-          <span
-            className="text-white/25 text-sm"
-            style={{ fontFamily: 'var(--font-dancing)' }}
           >
-            Ospreay Photo
-          </span>
-        </div>
+            <img
+              src={photo.url_medium}
+              alt={photo.caption || photo.file_name}
+              draggable={false}
+              style={{
+                display: 'block',
+                maxWidth: '100%',
+                maxHeight: 'calc(100vh - 130px)',
+                objectFit: 'contain',
+              }}
+              onLoad={() => setLoaded(true)}
+            />
+            {/* Watermark pinned to actual image bottom */}
+            <div className="absolute bottom-2 left-0 right-0 text-center pointer-events-none select-none">
+              <span
+                className="text-white/30 text-xs"
+                style={{ fontFamily: 'var(--font-dancing)' }}
+              >
+                Ospreay Photo
+              </span>
+            </div>
+          </motion.div>
+        </AnimatePresence>
 
         {/* EXIF Panel */}
         <AnimatePresence>

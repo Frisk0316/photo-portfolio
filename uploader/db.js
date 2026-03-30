@@ -1,6 +1,16 @@
 import pg from 'pg';
 import { config } from './config.js';
 
+async function autoTranslate(text) {
+  try {
+    const { translate } = await import('google-translate-api-x');
+    const result = await translate(text, { from: 'zh-TW', to: 'en' });
+    return result.text || null;
+  } catch {
+    return null;
+  }
+}
+
 const { Pool } = pg;
 let pool = null;
 
@@ -42,9 +52,10 @@ export async function findOrCreateAlbum(albumData) {
   const db = getPool();
   const existing = await db.query('SELECT id, photo_count FROM albums WHERE slug = $1', [albumData.slug]);
   if (existing.rows.length > 0) return { id: existing.rows[0].id, existed: true, existingCount: existing.rows[0].photo_count };
+  const titleEn = await autoTranslate(albumData.title);
   const result = await db.query(
-    `INSERT INTO albums (title, slug, shot_date, folder_name, sort_order) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [albumData.title, albumData.slug, albumData.date, albumData.folderName, albumData.sortOrder || 0]
+    `INSERT INTO albums (title, slug, shot_date, folder_name, sort_order, title_en) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+    [albumData.title, albumData.slug, albumData.date, albumData.folderName, albumData.sortOrder || 0, titleEn]
   );
   return { id: result.rows[0].id, existed: false, existingCount: 0 };
 }

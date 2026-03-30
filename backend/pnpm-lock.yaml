@@ -29,6 +29,9 @@ importers:
       express-rate-limit:
         specifier: ^8.3.1
         version: 8.3.1(express@4.22.1)
+      google-translate-api-x:
+        specifier: ^10.7.2
+        version: 10.7.2
       helmet:
         specifier: ^8.0.0
         version: 8.1.0
@@ -769,6 +772,10 @@ packages:
   glob-parent@5.1.2:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
     engines: {node: '>= 6'}
+
+  google-translate-api-x@10.7.2:
+    resolution: {integrity: sha512-GSmbvGMcnULaih2NFgD4Y6840DLAMot90mLWgwoB+FG/QpetyZkFrZkxop8ZxXgOAQXGskFOhGJady8nA6ZJ2g==}
+    engines: {node: '>=14.0.0'}
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -2299,6 +2306,8 @@ snapshots:
   glob-parent@5.1.2:
     dependencies:
       is-glob: 4.0.3
+
+  google-translate-api-x@10.7.2: {}
 
   gopd@1.2.0: {}
 

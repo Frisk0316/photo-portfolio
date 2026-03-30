@@ -217,6 +217,15 @@ export const heroImages = {
     request<{ data: { id: number } }>(`/api/hero-images/${id}/crop`, { method: 'PUT', body: JSON.stringify({ crop_desktop, crop_mobile }) }),
 };
 
+// Translation
+export const translate = {
+  text: (text: string) =>
+    request<{ data: { translated: string } }>('/api/translate', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+};
+
 // Download (watermarked)
 export const download = {
   getUrl: (photoId: number) => `${API_URL}/api/download/${photoId}`,

@@ -8,6 +8,16 @@ import pool from '../services/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
 
+async function autoTranslate(text) {
+  try {
+    const { translate } = await import('google-translate-api-x');
+    const result = await translate(text, { from: 'zh-TW', to: 'en' });
+    return result.text || null;
+  } catch {
+    return null;
+  }
+}
+
 const router = Router();
 
 // ── Scanner logic (adapted from uploader/scanner.js) ──
@@ -292,9 +302,10 @@ router.post('/execute', requireAuth, async (req, res) => {
       if (existingAlbum.rows.length > 0) {
         albumId = existingAlbum.rows[0].id;
       } else {
+        const titleEn = await autoTranslate(albumData.albumTitle);
         const newAlbum = await pool.query(
-          'INSERT INTO albums (title, slug, shot_date, folder_name, sort_order) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-          [albumData.albumTitle, albumData.slug, albumData.date, albumData.folderName, 0]
+          'INSERT INTO albums (title, slug, shot_date, folder_name, sort_order, title_en) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+          [albumData.albumTitle, albumData.slug, albumData.date, albumData.folderName, 0, titleEn]
         );
         albumId = newAlbum.rows[0].id;
       }

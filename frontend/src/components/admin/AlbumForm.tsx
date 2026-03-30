@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { slugify } from '@/lib/utils';
-import { categories } from '@/lib/api';
+import { categories, translate } from '@/lib/api';
 import type { Album, Category } from '@/lib/api';
 
 interface AlbumFormProps {
@@ -24,12 +24,41 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
   const [categoryList, setCategoryList] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [translating, setTranslating] = useState(false);
+
+  // Track whether titleEn was set by the user (prevents auto-overwrite)
+  const userEditedTitleEn = useRef(!!initial.title_en);
+  const translateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     categories.list().then((r) => setCategoryList(r.data));
   }, []);
 
   useEffect(() => {
     setSlug(slugify(title));
+
+    // Auto-translate: only if user hasn't manually set an English title
+    if (userEditedTitleEn.current) return;
+    if (!title.trim()) { setTitleEn(''); return; }
+
+    if (translateTimer.current) clearTimeout(translateTimer.current);
+    translateTimer.current = setTimeout(async () => {
+      setTranslating(true);
+      try {
+        const res = await translate.text(title);
+        if (!userEditedTitleEn.current) {
+          setTitleEn(res.data.translated);
+        }
+      } catch {
+        // silently ignore translation errors
+      } finally {
+        setTranslating(false);
+      }
+    }, 600);
+
+    return () => {
+      if (translateTimer.current) clearTimeout(translateTimer.current);
+    };
   }, [title]);
 
   const isDirty =
@@ -79,11 +108,20 @@ export default function AlbumForm({ initial = {}, onSubmit, submitLabel = 'Save'
       </div>
 
       <div>
-        <label className="block text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>Title (English)</label>
+        <label className="block text-xs mb-1.5 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+          Title (English)
+          {translating && <span className="text-xs opacity-50">翻譯中…</span>}
+        </label>
         <input
-          type="text" value={titleEn} onChange={(e) => setTitleEn(e.target.value)}
-          placeholder="English title for i18n"
-          className={inputClass} style={inputStyle}
+          type="text"
+          value={titleEn}
+          onChange={(e) => {
+            userEditedTitleEn.current = true;
+            setTitleEn(e.target.value);
+          }}
+          placeholder="Auto-translated from title"
+          className={inputClass}
+          style={inputStyle}
         />
       </div>
 

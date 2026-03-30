@@ -20,6 +20,9 @@ importers:
       express:
         specifier: ^4.19.2
         version: 4.22.1
+      google-translate-api-x:
+        specifier: ^10.7.2
+        version: 10.7.2
       pg:
         specifier: ^8.11.5
         version: 8.20.0
@@ -657,6 +660,10 @@ packages:
   get-proto@1.0.1:
     resolution: {integrity: sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==}
     engines: {node: '>= 0.4'}
+
+  google-translate-api-x@10.7.2:
+    resolution: {integrity: sha512-GSmbvGMcnULaih2NFgD4Y6840DLAMot90mLWgwoB+FG/QpetyZkFrZkxop8ZxXgOAQXGskFOhGJady8nA6ZJ2g==}
+    engines: {node: '>=14.0.0'}
 
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
@@ -1940,6 +1947,8 @@ snapshots:
     dependencies:
       dunder-proto: 1.0.1
       es-object-atoms: 1.1.1
+
+  google-translate-api-x@10.7.2: {}
 
   gopd@1.2.0: {}
 

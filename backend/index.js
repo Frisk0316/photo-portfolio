@@ -12,6 +12,7 @@ import batchUploadRoutes from './routes/batch-upload.js';
 import contactRoutes from './routes/contact.js';
 import heroRoutes from './routes/hero.js';
 import serveRoutes from './routes/serve.js';
+import translateRoutes from './routes/translate.js';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/batch-upload', batchUploadRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/hero-images', heroRoutes);
+app.use('/api/translate', translateRoutes);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

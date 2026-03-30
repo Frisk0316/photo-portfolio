@@ -88,15 +88,20 @@ router.get('/:slug', async (req, res) => {
 // POST /api/albums
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { title, description, category_id, shot_date, folder_name, sort_order = 0 } = req.body;
+    const { title, description, category_id, shot_date, folder_name, sort_order = 0, title_en, description_en } = req.body;
     const slug = slugify(title);
+    const existing = await pool.query('SELECT id FROM albums WHERE slug = $1', [slug]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: '已有相同的相簿名稱' });
+    }
     const result = await pool.query(
-      `INSERT INTO albums (title, slug, description, category_id, shot_date, folder_name, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [title, slug, description, category_id, shot_date, folder_name, sort_order]
+      `INSERT INTO albums (title, slug, description, category_id, shot_date, folder_name, sort_order, title_en, description_en)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [title, slug, description, category_id, shot_date, folder_name, sort_order, title_en || null, description_en || null]
     );
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: '已有相同的相簿名稱' });
     res.status(500).json({ error: safeError(err) });
   }
 });
