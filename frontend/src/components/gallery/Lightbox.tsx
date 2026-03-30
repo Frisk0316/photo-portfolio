@@ -300,7 +300,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
             {/* Watermark pinned to actual image bottom */}
             <div className="absolute bottom-2 left-0 right-0 text-center pointer-events-none select-none">
               <span
-                className="text-white/30 text-xs"
+                className="text-white/55 text-sm"
                 style={{ fontFamily: 'var(--font-dancing)' }}
               >
                 Ospreay Photo
