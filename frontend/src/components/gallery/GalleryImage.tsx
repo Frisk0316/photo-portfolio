@@ -62,7 +62,7 @@ export default function GalleryImage({
       {/* Watermark */}
       <div className="absolute bottom-2 left-0 right-0 z-10 text-center pointer-events-none select-none">
         <span
-          className="text-white/60 text-xs"
+          className="text-white/60 text-[8px]"
           style={{ fontFamily: 'var(--font-dancing)' }}
         >
           Ospreay Photo
