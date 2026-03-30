@@ -22,7 +22,7 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: required('JWT_SECRET'),
   adminUsername: required('ADMIN_USERNAME'),
-  adminPassword: required('ADMIN_PASSWORD'),
+  adminPasswordHash: required('ADMIN_PASSWORD_HASH'),
   r2: {
     accountId: optional('R2_ACCOUNT_ID', ''),
     accessKeyId: optional('R2_ACCESS_KEY_ID', ''),
@@ -54,8 +54,8 @@ export const config = {
 if (config.jwtSecret === 'change-this-to-a-random-string') {
   console.warn('[SECURITY] JWT_SECRET is still the default placeholder — generate a strong secret with: openssl rand -hex 32');
 }
-if (config.adminPassword === 'change-this') {
-  console.warn('[SECURITY] ADMIN_PASSWORD is still the default placeholder — set a strong password (16+ characters)');
+if (!config.adminPasswordHash.startsWith('$2')) {
+  console.warn('[SECURITY] ADMIN_PASSWORD_HASH does not look like a valid bcrypt hash — run the hash generation script');
 }
 if (!config.allowedOrigins.length) {
   console.warn('[SECURITY] ALLOWED_ORIGINS is empty — CORS will reject all cross-origin requests');

@@ -2,71 +2,17 @@ import sharp from 'sharp';
 import { encode } from 'blurhash';
 import { config } from './config.js';
 
-const WATERMARK_TEXT = 'Ospreay Photo';
-
-function buildWatermarkSvg(imgWidth, imgHeight) {
-  const fontSize = Math.max(16, Math.floor(imgWidth / 28));
-  const cols = 4;
-  const rows = 4;
-  const cellW = imgWidth / cols;
-  const cellH = imgHeight / rows;
-
-  const items = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = Math.floor(cellW * c + cellW / 2);
-      const y = Math.floor(cellH * r + cellH / 2);
-      // Dark shadow for visibility on bright backgrounds
-      items.push(`<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle"
-        font-family="Arial, sans-serif" font-size="${fontSize}" fill="rgba(0,0,0,0.25)"
-        transform="rotate(-30,${x},${y})" dx="1" dy="1">${WATERMARK_TEXT}</text>`);
-      // White text on top
-      items.push(`<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle"
-        font-family="Arial, sans-serif" font-size="${fontSize}" fill="rgba(255,255,255,0.32)"
-        transform="rotate(-30,${x},${y})">${WATERMARK_TEXT}</text>`);
-    }
-  }
-
-  return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${imgHeight}">${items.join('')}</svg>`
-  );
-}
-
-async function applyWatermark(pipeline, width, height) {
-  const svg = buildWatermarkSvg(width, height);
-  return pipeline.composite([{ input: svg, gravity: 'center' }]);
-}
-
 export async function processImage(imagePath) {
   const image = sharp(imagePath);
   const metadata = await image.metadata();
   const { width, height } = metadata;
   const aspectRatio = width / height;
 
-  // Compute output dimensions for watermark sizing
-  const thumbH = Math.min(config.thumbnailHeight, height);
-  const thumbW = Math.round(thumbH * aspectRatio);
-  const medW = Math.min(config.mediumWidth, width);
-  const medH = Math.round(medW / aspectRatio);
-
   const [original, thumbnail, medium, webpFull, blurHash] = await Promise.all([
-    // Original: no watermark (kept as archival copy, not served directly)
     sharp(imagePath).jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer(),
-    // Thumbnail: watermark embedded
-    applyWatermark(
-      sharp(imagePath).resize({ height: config.thumbnailHeight, withoutEnlargement: true }),
-      thumbW, thumbH
-    ).then(p => p.jpeg({ quality: 80, mozjpeg: true }).toBuffer()),
-    // Medium: watermark embedded
-    applyWatermark(
-      sharp(imagePath).resize({ width: config.mediumWidth, withoutEnlargement: true }),
-      medW, medH
-    ).then(p => p.jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer()),
-    // WebP medium: watermark embedded
-    applyWatermark(
-      sharp(imagePath).resize({ width: config.mediumWidth, withoutEnlargement: true }),
-      medW, medH
-    ).then(p => p.webp({ quality: config.webpQuality }).toBuffer()),
+    sharp(imagePath).resize({ height: config.thumbnailHeight, withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true }).toBuffer(),
+    sharp(imagePath).resize({ width: config.mediumWidth, withoutEnlargement: true }).jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer(),
+    sharp(imagePath).resize({ width: config.mediumWidth, withoutEnlargement: true }).webp({ quality: config.webpQuality }).toBuffer(),
     generateBlurHash(imagePath),
   ]);
 
