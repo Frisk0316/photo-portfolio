@@ -38,7 +38,8 @@ export async function initializeSchema() {
       file_name VARCHAR(500) NOT NULL, caption TEXT, group_tag VARCHAR(200),
       aspect_ratio REAL, aspect_category VARCHAR(20), width INTEGER, height INTEGER,
       blur_hash VARCHAR(100), url_original TEXT, url_thumbnail TEXT, url_medium TEXT, url_webp TEXT,
-      file_size INTEGER, sort_order INTEGER DEFAULT 0, exif_data JSONB, created_at TIMESTAMPTZ DEFAULT NOW()
+      file_size INTEGER, sort_order INTEGER DEFAULT 0, exif_data JSONB, created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (album_id, file_name)
     );
     CREATE INDEX IF NOT EXISTS idx_photos_album_id ON photos(album_id);
     CREATE INDEX IF NOT EXISTS idx_photos_sort_order ON photos(album_id, sort_order);
@@ -65,7 +66,7 @@ export async function insertPhoto(photoData) {
   const result = await db.query(
     `INSERT INTO photos (album_id, file_name, group_tag, aspect_ratio, aspect_category, width, height, blur_hash,
       url_original, url_thumbnail, url_medium, url_webp, file_size, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT DO NOTHING RETURNING id`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (album_id, file_name) DO NOTHING RETURNING id`,
     [photoData.albumId, photoData.fileName, photoData.groupTag, photoData.aspectRatio, photoData.aspectCategory,
      photoData.width, photoData.height, photoData.blurHash, photoData.urlOriginal, photoData.urlThumbnail,
      photoData.urlMedium, photoData.urlWebp, photoData.fileSize, photoData.sortOrder]

@@ -289,39 +289,42 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         )}
 
         <AnimatePresence mode="wait">
-          {/* Wrapper shrinks to actual image size so watermark follows the image */}
+          {/* Outer wrapper: full size for zoom/transform calculations */}
           <motion.div
             key={photo.id}
-            className="relative z-10 select-none"
+            className="z-10 select-none flex items-center justify-center"
             style={{
-              width: '100%',
-              height: 'calc(100vh - 130px)',
+              position: 'absolute',
+              inset: 0,
               transform: `scale(${scale}) translate(${translate.x / scale}px, ${translate.y / scale}px)`,
               transition: isDragging ? 'none' : 'transform 0.2s ease-out',
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: loaded ? 1 : 0 }}
           >
-            <img
-              src={photo.url_medium}
-              alt={photo.caption || photo.file_name}
-              draggable={false}
-              style={{
-                display: 'block',
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-              }}
-              onLoad={() => setLoadedId(photo.id)}
-            />
-            {/* Watermark pinned to actual image bottom */}
-            <div className="absolute bottom-2 left-0 right-0 text-center pointer-events-none select-none">
-              <span
-                className="text-white/55 text-sm"
-                style={{ fontFamily: 'var(--font-dancing)' }}
-              >
-                Ospreay Photo
-              </span>
+            {/* Inner wrapper shrinks to actual image dimensions so watermark follows the image */}
+            <div className="relative" style={{ maxWidth: '100%', maxHeight: '100%' }}>
+              <img
+                src={photo.url_medium}
+                alt={photo.caption || photo.file_name}
+                draggable={false}
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  maxHeight: 'calc(100vh - 130px)',
+                  objectFit: 'contain',
+                }}
+                onLoad={() => setLoadedId(photo.id)}
+              />
+              {/* Watermark pinned to actual image bottom */}
+              <div className="absolute bottom-2 left-0 right-0 text-center pointer-events-none select-none">
+                <span
+                  className="text-white/55 text-sm"
+                  style={{ fontFamily: 'var(--font-dancing)' }}
+                >
+                  Ospreay Photo
+                </span>
+              </div>
             </div>
           </motion.div>
         </AnimatePresence>
