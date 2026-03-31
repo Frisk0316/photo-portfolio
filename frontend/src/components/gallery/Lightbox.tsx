@@ -24,7 +24,7 @@ const EXIF_KEYS = ['Make', 'Model', 'LensModel', 'FocalLength', 'FNumber', 'Expo
 export default function Lightbox({ photos, initialIndex, onClose }: LightboxProps) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(initialIndex);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedId, setLoadedId] = useState<number | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
   // Zoom & pan state
@@ -33,6 +33,8 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const imageAreaRef = useRef<HTMLDivElement>(null);
+  const isMultiTouch = useRef(false);
+  const touchStartY = useRef<number | null>(null);
 
   // EXIF panel
   const [showExif, setShowExif] = useState(false);
@@ -42,6 +44,7 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
   const slideshowRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const photo = photos[index];
+  const loaded = loadedId === photo.id;
 
   // Preload adjacent images for faster navigation
   useEffect(() => {
@@ -63,13 +66,11 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
   }, []);
 
   const prev = useCallback(() => {
-    setLoaded(false);
     resetZoom();
     setIndex((i) => (i - 1 + photos.length) % photos.length);
   }, [photos.length, resetZoom]);
 
   const next = useCallback(() => {
-    setLoaded(false);
     resetZoom();
     setIndex((i) => (i + 1) % photos.length);
   }, [photos.length, resetZoom]);
@@ -85,10 +86,6 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
       if (slideshowRef.current) clearInterval(slideshowRef.current);
     };
   }, [isPlaying, next]);
-
-  useEffect(() => {
-    setLoaded(false);
-  }, [index]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -246,17 +243,38 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
         onMouseLeave={handleMouseUp}
         onTouchStart={(e) => {
           if (scale > 1) return;
+          if (e.touches.length > 1) {
+            isMultiTouch.current = true;
+            setTouchStart(null);
+            return;
+          }
+          isMultiTouch.current = false;
           setTouchStart(e.touches[0].clientX);
+          touchStartY.current = e.touches[0].clientY;
+        }}
+        onTouchMove={(e) => {
+          if (e.touches.length > 1) {
+            isMultiTouch.current = true;
+            setTouchStart(null);
+          }
         }}
         onTouchEnd={(e) => {
           if (scale > 1) return;
+          if (isMultiTouch.current) {
+            isMultiTouch.current = false;
+            setTouchStart(null);
+            touchStartY.current = null;
+            return;
+          }
           if (touchStart === null) return;
-          const diff = touchStart - e.changedTouches[0].clientX;
-          if (Math.abs(diff) > 60) {
+          const diffX = touchStart - e.changedTouches[0].clientX;
+          const diffY = (touchStartY.current ?? 0) - e.changedTouches[0].clientY;
+          if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY)) {
             setIsPlaying(false);
-            diff > 0 ? next() : prev();
+            diffX > 0 ? next() : prev();
           }
           setTouchStart(null);
+          touchStartY.current = null;
         }}
       >
         {/* Blur placeholder */}
@@ -276,9 +294,8 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
             key={photo.id}
             className="relative z-10 select-none"
             style={{
-              display: 'inline-block',
-              maxWidth: '100%',
-              maxHeight: '100%',
+              width: '100%',
+              height: 'calc(100vh - 130px)',
               transform: `scale(${scale}) translate(${translate.x / scale}px, ${translate.y / scale}px)`,
               transition: isDragging ? 'none' : 'transform 0.2s ease-out',
             }}
@@ -291,11 +308,11 @@ export default function Lightbox({ photos, initialIndex, onClose }: LightboxProp
               draggable={false}
               style={{
                 display: 'block',
-                maxWidth: '100%',
-                maxHeight: 'calc(100vh - 130px)',
+                width: '100%',
+                height: '100%',
                 objectFit: 'contain',
               }}
-              onLoad={() => setLoaded(true)}
+              onLoad={() => setLoadedId(photo.id)}
             />
             {/* Watermark pinned to actual image bottom */}
             <div className="absolute bottom-2 left-0 right-0 text-center pointer-events-none select-none">

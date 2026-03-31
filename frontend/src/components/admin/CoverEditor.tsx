@@ -167,6 +167,12 @@ export default function CoverEditor({ photos, coverPhotoId, coverCropData, cover
                   className="w-full h-full object-cover"
                   style={imageStyle}
                   draggable={false}
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.src !== selectedPhoto.url_thumbnail) {
+                      img.src = selectedPhoto.url_thumbnail;
+                    }
+                  }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-sm"
