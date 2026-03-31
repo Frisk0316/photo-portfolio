@@ -56,7 +56,7 @@ router.get('/:photoId/:variant', async (req, res) => {
 
   const cacheKey = `${photoId}_${variant}`;
 
-  // Check memory cache
+  // Check memory cache (only valid for published/watermarked images)
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     res.setHeader('Content-Type', 'image/jpeg');
@@ -64,11 +64,15 @@ router.get('/:photoId/:variant', async (req, res) => {
     res.setHeader('X-Cache', 'HIT');
     return res.send(cached.buffer);
   }
+  // Evict stale cache entry if present but expired
+  cache.delete(cacheKey);
 
   try {
     const urlCol = variant === 'thumb' ? 'url_thumbnail' : 'url_medium';
     const { rows } = await pool.query(
-      `SELECT id, ${urlCol} as url, url_original FROM photos WHERE id = $1`,
+      `SELECT p.id, p.${urlCol} as url, p.url_original, a.is_published
+       FROM photos p JOIN albums a ON p.album_id = a.id
+       WHERE p.id = $1`,
       [photoId]
     );
 
@@ -85,6 +89,14 @@ router.get('/:photoId/:variant', async (req, res) => {
     }
 
     const buffer = await downloadFromR2(key);
+
+    // Skip watermark for unpublished albums
+    if (!rows[0].is_published) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(buffer);
+    }
+
     const meta = await sharp(buffer).metadata();
     const imgWidth = meta.width || 800;
     const imgHeight = meta.height || 600;

@@ -163,15 +163,34 @@ export default function PhotoGrid({ albumId, photos, onChange }: PhotoGridProps)
         </div>
       )}
 
-      {selected.size > 0 && !deleteProgress && (
-        <div className="mb-4 flex items-center gap-3">
-          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{selected.size} selected</span>
-          <button onClick={handleBulkDelete} className="text-xs text-red-400 hover:text-red-300">
-            Delete selected
-          </button>
-          <button onClick={() => setSelected(new Set())} className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            Clear
-          </button>
+      {!deleteProgress && (
+        <div className="mb-4 flex items-center gap-3 flex-wrap">
+          {selected.size === 0 ? (
+            <button
+              onClick={() => setSelected(new Set(photos.map((p) => p.id)))}
+              className="text-xs"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              Select All ({photos.length})
+            </button>
+          ) : (
+            <>
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{selected.size} / {photos.length} selected</span>
+              <button
+                onClick={() => setSelected(new Set(photos.map((p) => p.id)))}
+                className="text-xs"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                Select All
+              </button>
+              <button onClick={handleBulkDelete} className="text-xs text-red-400 hover:text-red-300">
+                Delete selected
+              </button>
+              <button onClick={() => setSelected(new Set())} className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Clear
+              </button>
+            </>
+          )}
         </div>
       )}
 
