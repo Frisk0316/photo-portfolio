@@ -56,16 +56,11 @@ router.get('/:photoId/:variant', async (req, res) => {
 
   const cacheKey = `${photoId}_${variant}`;
 
-  // Check memory cache (only valid for published/watermarked images)
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    res.setHeader('Content-Type', 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
-    res.setHeader('X-Cache', 'HIT');
-    return res.send(cached.buffer);
+  // Evict stale cache entry upfront
+  const existing = cache.get(cacheKey);
+  if (existing && Date.now() - existing.timestamp >= CACHE_TTL) {
+    cache.delete(cacheKey);
   }
-  // Evict stale cache entry if present but expired
-  cache.delete(cacheKey);
 
   try {
     const urlCol = variant === 'thumb' ? 'url_thumbnail' : 'url_medium';
