@@ -217,6 +217,39 @@ export const heroImages = {
     request<{ data: { id: number } }>(`/api/hero-images/${id}/crop`, { method: 'PUT', body: JSON.stringify({ crop_desktop, crop_mobile }) }),
 };
 
+// Homepage featured albums
+export interface HomepageFeaturedItem {
+  id: number; // homepage_featured.id
+  section: 'events' | 'other';
+  sort_order: number;
+  album_id: number;
+  title: string;
+  title_en: string | null;
+  slug: string;
+  shot_date: string | null;
+  photo_count: number;
+  cover_crop_data: { offsetX: number; offsetY: number; zoom: number } | null;
+  cover_aspect_ratio: string | null;
+  cover_url: string | null;
+}
+
+export const homepageFeatured = {
+  list: (section?: 'events' | 'other') =>
+    request<{ data: HomepageFeaturedItem[] }>(`/api/homepage-featured${section ? `?section=${section}` : ''}`),
+  add: (section: 'events' | 'other', albumId: number) =>
+    request<{ data: { id: number } }>('/api/homepage-featured', {
+      method: 'POST',
+      body: JSON.stringify({ section, album_id: albumId }),
+    }),
+  remove: (id: number) =>
+    request<{ data: { success: true } }>(`/api/homepage-featured/${id}`, { method: 'DELETE' }),
+  reorder: (items: { id: number; sort_order: number }[]) =>
+    request<{ data: { success: true } }>('/api/homepage-featured/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    }),
+};
+
 // Translation
 export const translate = {
   text: (text: string) =>

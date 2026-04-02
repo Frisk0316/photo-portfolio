@@ -5,10 +5,33 @@ import Link from 'next/link';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HeroCarousel from '@/components/home/HeroCarousel';
-import { albums } from '@/lib/api';
+import { albums, homepageFeatured } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
-import type { Album } from '@/lib/api';
+import type { Album, HomepageFeaturedItem } from '@/lib/api';
+
+function featuredItemToAlbum(item: HomepageFeaturedItem): Album {
+  return {
+    id: item.album_id,
+    title: item.title,
+    title_en: item.title_en,
+    slug: item.slug,
+    shot_date: item.shot_date,
+    photo_count: item.photo_count,
+    cover_crop_data: item.cover_crop_data,
+    cover_aspect_ratio: item.cover_aspect_ratio ?? '',
+    cover_url: item.cover_url ?? undefined,
+    category_id: null,
+    description: null,
+    description_en: null,
+    folder_name: null,
+    cover_photo_id: null,
+    is_published: true,
+    sort_order: item.sort_order,
+    created_at: '',
+    updated_at: '',
+  };
+}
 
 export default function HomePage() {
   const { t } = useTranslation();
@@ -16,8 +39,26 @@ export default function HomePage() {
   const [otherAlbums, setOtherAlbums] = useState<Album[]>([]);
 
   useEffect(() => {
-    albums.list(false, 'date_desc', 'events').then(r => setEventAlbums(r.data.slice(0, 3))).catch(() => {});
-    albums.list(false, 'date_desc', 'other').then(r => setOtherAlbums(r.data.slice(0, 3))).catch(() => {});
+    // Try featured first; fall back to latest 3 by date
+    homepageFeatured.list('events').then(r => {
+      if (r.data.length > 0) {
+        setEventAlbums(r.data.map(featuredItemToAlbum));
+      } else {
+        albums.list(false, 'date_desc', 'events').then(res => setEventAlbums(res.data.slice(0, 3))).catch(() => {});
+      }
+    }).catch(() => {
+      albums.list(false, 'date_desc', 'events').then(res => setEventAlbums(res.data.slice(0, 3))).catch(() => {});
+    });
+
+    homepageFeatured.list('other').then(r => {
+      if (r.data.length > 0) {
+        setOtherAlbums(r.data.map(featuredItemToAlbum));
+      } else {
+        albums.list(false, 'date_desc', 'other').then(res => setOtherAlbums(res.data.slice(0, 3))).catch(() => {});
+      }
+    }).catch(() => {
+      albums.list(false, 'date_desc', 'other').then(res => setOtherAlbums(res.data.slice(0, 3))).catch(() => {});
+    });
   }, []);
 
   return (
@@ -40,7 +81,7 @@ export default function HomePage() {
         />
 
         {/* Divider */}
-        <div className="my-16" style={{ borderTop: '1px solid var(--border)' }} />
+        <div className="my-8" style={{ borderTop: '1px solid var(--border)' }} />
 
         {/* Gallery section preview */}
         <SectionPreview
@@ -76,7 +117,7 @@ function SectionPreview({
   const { t } = useTranslation();
 
   return (
-    <section className="py-16">
+    <section className="py-10">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
         <div>
           <p className="text-xs tracking-[0.2em] uppercase mb-3"

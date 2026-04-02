@@ -4,6 +4,7 @@ import pool from '../services/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { safeError } from '../utils/safeError.js';
+import { clearAlbumServeCache } from './serve.js';
 
 const router = Router();
 
@@ -173,6 +174,10 @@ router.put('/:id', requireAuth, async (req, res) => {
       [title, slug, description, category_id, shot_date, is_published, cover_photo_id, sort_order, cover_crop_data ? JSON.stringify(cover_crop_data) : null, title_en, description_en, cover_aspect_ratio, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    // Invalidate serve cache when publish status changes
+    if (is_published !== undefined) {
+      await clearAlbumServeCache(req.params.id);
+    }
     res.json({ data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });

@@ -77,22 +77,26 @@ async function scanAlbumFolder(folderName, folderPath, manifest) {
     return;
   }
 
-  const editedPath = await findEditedFolder(folderPath);
-  if (!editedPath) {
-    manifest.skippedFolders.push({ name: folderName, reason: `No edited folder found (looked for: ${config.editedFolderNames.join(', ')})` });
-    return;
+  let scanPath = await findEditedFolder(folderPath);
+  const scanSource = scanPath ? 'edited-subfolder' : 'album-folder';
+
+  if (!scanPath) {
+    scanPath = folderPath;
   }
 
   let images;
   try {
-    images = await collectImages(editedPath);
+    images = await collectImages(scanPath);
   } catch (err) {
-    manifest.errors.push({ path: editedPath, error: `Failed to scan: ${err.message}` });
+    manifest.errors.push({ path: scanPath, error: `Failed to scan: ${err.message}` });
     return;
   }
 
   if (images.length === 0) {
-    manifest.skippedFolders.push({ name: folderName, reason: 'Edited folder is empty' });
+    const reason = scanSource === 'edited-subfolder'
+      ? `Edited folder is empty (source: ${path.basename(scanPath)})`
+      : 'Album folder contains no images';
+    manifest.skippedFolders.push({ name: folderName, reason });
     return;
   }
 
@@ -112,7 +116,7 @@ async function scanAlbumFolder(folderName, folderPath, manifest) {
   manifest.albums.push({
     folderName,
     ...parsed,
-    editedFolderPath: editedPath,
+    editedFolderPath: scanPath,
     photos: imagesWithSize,
     photoCount: imagesWithSize.length,
     totalSize: imagesWithSize.reduce((sum, i) => sum + i.fileSize, 0),
@@ -131,11 +135,23 @@ export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
     errors: [],
   };
 
-  // Check if rootDir itself is an album folder
   const rootFolderName = path.basename(rootDir);
+
+  // Check if rootDir itself is an album folder (YYYYMMDD - Title)
   if (parseAlbumFolder(rootFolderName)) {
     await scanAlbumFolder(rootFolderName, rootDir, manifest);
     return manifest;
+  }
+
+  // Check if rootDir is an edited subfolder (e.g. "調整後 JPG") — use parent as album
+  const editedNamesLower = config.editedFolderNames.map(n => n.trim().toLowerCase());
+  if (editedNamesLower.includes(rootFolderName.trim().toLowerCase())) {
+    const parentDir = path.dirname(rootDir);
+    const parentName = path.basename(parentDir);
+    if (parseAlbumFolder(parentName)) {
+      await scanAlbumFolder(parentName, parentDir, manifest);
+      return manifest;
+    }
   }
 
   let rootEntries;

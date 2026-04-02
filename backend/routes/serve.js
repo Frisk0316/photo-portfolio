@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import jwt from 'jsonwebtoken';
 import sharp from 'sharp';
 import pool from '../services/db.js';
 import { downloadFromR2 } from '../services/r2.js';
@@ -18,6 +19,22 @@ function evictStale() {
     if (now - v.timestamp > CACHE_TTL || cache.size > MAX_CACHE_SIZE) {
       cache.delete(k);
     }
+  }
+}
+
+/**
+ * Clear all cached variants for photos belonging to a given album.
+ * Called when an album's is_published status changes.
+ */
+export async function clearAlbumServeCache(albumId) {
+  try {
+    const { rows } = await pool.query('SELECT id FROM photos WHERE album_id = $1', [albumId]);
+    for (const row of rows) {
+      cache.delete(`${row.id}_thumb`);
+      cache.delete(`${row.id}_medium`);
+    }
+  } catch {
+    // non-critical — cache will expire naturally
   }
 }
 
@@ -62,6 +79,18 @@ router.get('/:photoId/:variant', async (req, res) => {
     cache.delete(cacheKey);
   }
 
+  // Check if admin is requesting (bypass watermark)
+  let isAdmin = false;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      jwt.verify(authHeader.slice(7), config.jwtSecret);
+      isAdmin = true;
+    } catch {
+      // invalid token — treat as public
+    }
+  }
+
   try {
     const urlCol = variant === 'thumb' ? 'url_thumbnail' : 'url_medium';
     const { rows } = await pool.query(
@@ -85,20 +114,31 @@ router.get('/:photoId/:variant', async (req, res) => {
 
     const buffer = await downloadFromR2(key);
 
-    // Skip watermark for unpublished albums
-    if (!rows[0].is_published) {
+    // Skip watermark for unpublished albums or admin requests
+    if (!rows[0].is_published || isAdmin) {
       res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'no-store');
       return res.send(buffer);
     }
 
-    const meta = await sharp(buffer).metadata();
+    // Use cached watermarked version if available
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800');
+      res.setHeader('X-Cache', 'HIT');
+      return res.send(cached.buffer);
+    }
+
+    // Auto-orient by EXIF before reading metadata (fixes rotated JPEGs)
+    const oriented = sharp(buffer).rotate();
+    const meta = await oriented.metadata();
     const imgWidth = meta.width || 800;
     const imgHeight = meta.height || 600;
 
     const watermarkSvg = buildWatermarkSvg(imgWidth, imgHeight, config.watermarkText, 0.13);
 
-    const watermarked = await sharp(buffer)
+    const watermarked = await oriented
       .composite([{ input: Buffer.from(watermarkSvg), gravity: 'center' }])
       .jpeg({ quality: variant === 'thumb' ? 80 : 85 })
       .toBuffer();

@@ -71,12 +71,25 @@ app.post('/api/browse', async (req, res) => {
   }
 });
 
-// Scan
+// Scan — accepts rootDirs (array) or legacy rootDir (string)
 app.post('/api/scan', async (req, res) => {
   try {
-    const rootDir = req.body.rootDir || config.photosRootDir;
-    const manifest = await scanPhotosDirectory(rootDir);
-    res.json({ data: manifest });
+    const dirs = req.body.rootDirs
+      ? req.body.rootDirs.filter(Boolean)
+      : [req.body.rootDir || config.photosRootDir];
+
+    const allAlbums = [], allSkipped = [], allErrors = [];
+    for (const dir of dirs) {
+      const m = await scanPhotosDirectory(dir);
+      allAlbums.push(...m.albums);
+      allSkipped.push(...m.skippedFolders);
+      allErrors.push(...m.errors);
+    }
+    // Deduplicate by slug (first occurrence wins)
+    const seen = new Set();
+    const albums = allAlbums.filter(a => seen.has(a.slug) ? false : (seen.add(a.slug), true));
+    const totalPhotos = albums.reduce((s, a) => s + a.photoCount, 0);
+    res.json({ data: { scannedAt: new Date().toISOString(), albums, totalPhotos, skippedFolders: allSkipped, errors: allErrors } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -101,14 +114,25 @@ app.post('/api/upload', async (req, res) => {
 
   try {
     await initializeSchema();
-    const rootDir = req.body.rootDir || config.photosRootDir;
-    console.log('[upload] rootDir:', rootDir);
+    const dirs = req.body.rootDirs
+      ? req.body.rootDirs.filter(Boolean)
+      : [req.body.rootDir || config.photosRootDir];
+    console.log('[upload] dirs:', dirs);
     console.log('[upload] selectedSlugs:', selectedSlugs);
-    const manifest = await scanPhotosDirectory(rootDir);
-    console.log('[upload] scanned albums:', manifest.albums.map(a => a.slug));
+
+    const allAlbums = [];
+    for (const dir of dirs) {
+      const m = await scanPhotosDirectory(dir);
+      allAlbums.push(...m.albums);
+    }
+    // Deduplicate by slug
+    const seen = new Set();
+    const scannedAlbums = allAlbums.filter(a => seen.has(a.slug) ? false : (seen.add(a.slug), true));
+
+    console.log('[upload] scanned albums:', scannedAlbums.map(a => a.slug));
     const albumsToUpload = selectedSlugs
-      ? manifest.albums.filter(a => selectedSlugs.includes(a.slug))
-      : manifest.albums;
+      ? scannedAlbums.filter(a => selectedSlugs.includes(a.slug))
+      : scannedAlbums;
     console.log('[upload] matched albums:', albumsToUpload.length);
     if (albumsToUpload.length > 0) {
       console.log('[upload] first album photos:', albumsToUpload[0].photoCount);
@@ -277,15 +301,11 @@ const HTML = /*html*/ `<!DOCTYPE html>
   <!-- Config -->
   <div class="card">
     <h2>Settings</h2>
-    <div class="row" style="margin-bottom:12px">
-      <div>
-        <label>Photos Root Directory</label>
-        <div class="row">
-          <input type="text" id="rootDir" />
-          <button class="btn-secondary shrink" onclick="toggleBrowser()">Browse</button>
-          <button class="btn-secondary shrink" onclick="saveConfig()">Save</button>
-        </div>
-      </div>
+    <div style="margin-bottom:12px">
+      <label>Photos Source Directories</label>
+      <div id="rootDirList"></div>
+      <button class="btn-secondary btn-sm" style="margin-top:8px" onclick="addRootDir()">+ Add Folder</button>
+      <button class="btn-secondary btn-sm" style="margin-top:8px;margin-left:8px" onclick="saveConfig()">Save Primary</button>
     </div>
     <div id="browserPanel" class="hidden">
       <div class="browser" id="browser"></div>
@@ -342,26 +362,60 @@ const HTML = /*html*/ `<!DOCTYPE html>
 <script>
 let albums = [];
 let scanData = null;
+let rootDirs = [''];
+let browsingIndex = 0;
+
+function renderRootDirs() {
+  const container = document.getElementById('rootDirList');
+  let html = '';
+  rootDirs.forEach((d, i) => {
+    html += '<div class="row" style="margin-bottom:6px">';
+    html += '<input type="text" value="'+esc(d)+'" oninput="rootDirs['+i+']=this.value" style="font-size:12px" />';
+    html += '<button class="btn-secondary shrink" onclick="openBrowser('+i+')">Browse</button>';
+    if (rootDirs.length > 1) {
+      html += '<button class="btn-secondary shrink" onclick="removeRootDir('+i+')" style="color:rgba(248,113,113,0.7)">×</button>';
+    }
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function addRootDir() {
+  rootDirs.push('');
+  renderRootDirs();
+}
+
+function removeRootDir(i) {
+  rootDirs.splice(i, 1);
+  renderRootDirs();
+}
 
 async function loadConfig() {
   const r = await fetch('/api/config').then(r => r.json());
-  document.getElementById('rootDir').value = r.photosRootDir;
+  rootDirs = [r.photosRootDir];
+  renderRootDirs();
   document.getElementById('concurrency').value = r.concurrency;
 }
 
 async function saveConfig() {
-  const rootDir = document.getElementById('rootDir').value;
   const concurrency = parseInt(document.getElementById('concurrency').value) || 4;
-  await fetch('/api/config', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ photosRootDir: rootDir, concurrency }) });
+  await fetch('/api/config', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ photosRootDir: rootDirs[0] || '', concurrency }) });
   toast('Settings saved');
 }
 
 // Browser
 let browserOpen = false;
+function openBrowser(index) {
+  browsingIndex = index;
+  browserOpen = true;
+  document.getElementById('browserPanel').classList.remove('hidden');
+  browse(rootDirs[index] || '');
+}
+
 function toggleBrowser() {
   browserOpen = !browserOpen;
   document.getElementById('browserPanel').classList.toggle('hidden', !browserOpen);
-  if (browserOpen) browse(document.getElementById('rootDir').value);
+  if (browserOpen) browse(rootDirs[browsingIndex] || '');
 }
 
 async function browse(dir) {
@@ -378,7 +432,8 @@ async function browse(dir) {
 }
 
 function pickFolder(p) {
-  document.getElementById('rootDir').value = p;
+  rootDirs[browsingIndex] = p;
+  renderRootDirs();
   browse(p);
 }
 
@@ -390,8 +445,9 @@ async function scan() {
   const btn = document.getElementById('scanBtn');
   btn.disabled = true; btn.textContent = 'Scanning...';
   try {
-    const rootDir = document.getElementById('rootDir').value;
-    const r = await fetch('/api/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rootDir }) }).then(r => r.json());
+    const dirs = rootDirs.filter(d => d.trim());
+    if (!dirs.length) { toast('請先設定資料夾路徑', true); btn.disabled = false; btn.textContent = 'Scan'; return; }
+    const r = await fetch('/api/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rootDirs: dirs }) }).then(r => r.json());
     scanData = r.data;
     albums = scanData.albums.map(a => ({ ...a, selected: true }));
     renderAlbums();
@@ -439,13 +495,13 @@ async function startUpload() {
   const log = document.getElementById('log');
   log.innerHTML = '';
 
-  const rootDir = document.getElementById('rootDir').value;
+  const dirs = rootDirs.filter(d => d.trim());
   const force = document.getElementById('forceUpload').checked;
 
   const res = await fetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rootDir, albums: selected, force }),
+    body: JSON.stringify({ rootDirs: dirs, albums: selected, force }),
   });
 
   const reader = res.body.getReader();

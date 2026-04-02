@@ -13,6 +13,7 @@ import contactRoutes from './routes/contact.js';
 import heroRoutes from './routes/hero.js';
 import serveRoutes from './routes/serve.js';
 import translateRoutes from './routes/translate.js';
+import homepageRoutes from './routes/homepage.js';
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/batch-upload', batchUploadRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/hero-images', heroRoutes);
 app.use('/api/translate', translateRoutes);
+app.use('/api/homepage-featured', homepageRoutes);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard' },
+  { href: '/admin/homepage', label: '首頁精選' },
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/hero', label: 'Hero Carousel' },
   { href: '/admin/contact', label: 'Contact Inbox' },
