@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { config } from './config.js';
 
-const ALBUM_PATTERN = /^(\d{4})(\d{2})(\d{2})\s*-\s*(.+)$/;
+const ALBUM_PATTERN = /^(\d{4})(\d{2})(\d{2})(?:\s*-\s*(.+))?$/;
 
 export function parseAlbumFolder(folderName) {
   const match = folderName.match(ALBUM_PATTERN);
@@ -11,13 +11,17 @@ export function parseAlbumFolder(folderName) {
   const dateStr = `${year}-${month}-${day}`;
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return null;
+  const dateKey = `${year}${month}${day}`;
+  const rawTitle = (title || '').trim();
+  const effectiveTitle = rawTitle || dateKey;
+  const slug = rawTitle ? `${dateKey}-${slugify(rawTitle)}` : dateKey;
   return {
     date: dateStr,
     year: parseInt(year),
     month: parseInt(month),
     day: parseInt(day),
-    title: title.trim(),
-    slug: `${year}${month}${day}-${slugify(title.trim())}`,
+    title: effectiveTitle,
+    slug,
   };
 }
 
@@ -31,21 +35,11 @@ function isTargetImage(filename) {
   return IMAGE_EXTENSIONS.has(path.extname(filename).toLowerCase());
 }
 
-async function findEditedFolder(albumPath) {
-  const entries = await fs.readdir(albumPath, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const nameNormalized = entry.name.trim().toLowerCase();
-    for (const editedName of config.editedFolderNames) {
-      if (nameNormalized === editedName.toLowerCase()) {
-        return path.join(albumPath, entry.name);
-      }
-    }
-  }
-  return null;
+function getSkipFolderSet() {
+  return new Set(config.skipFolderNames.map(n => n.trim().toLowerCase()));
 }
 
-async function collectImages(dir, basePath = dir, images = []) {
+async function collectImages(dir, basePath = dir, images = [], skipSet = getSkipFolderSet()) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const sorted = entries.sort((a, b) => {
     if (a.isDirectory() && !b.isDirectory()) return 1;
@@ -55,14 +49,15 @@ async function collectImages(dir, basePath = dir, images = []) {
   for (const entry of sorted) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      await collectImages(fullPath, basePath, images);
+      if (skipSet.has(entry.name.trim().toLowerCase())) continue;
+      await collectImages(fullPath, basePath, images, skipSet);
     } else if (isTargetImage(entry.name)) {
       const relativePath = path.relative(basePath, fullPath);
       const subFolder = path.dirname(relativePath);
       images.push({
         absolutePath: fullPath,
         fileName: entry.name,
-        group: subFolder === '.' ? null : subFolder,
+        group: subFolder === '.' ? null : path.basename(subFolder),
         sortOrder: images.length,
       });
     }
@@ -73,30 +68,20 @@ async function collectImages(dir, basePath = dir, images = []) {
 async function scanAlbumFolder(folderName, folderPath, manifest) {
   const parsed = parseAlbumFolder(folderName);
   if (!parsed) {
-    manifest.skippedFolders.push({ name: folderName, reason: 'Does not match YYYYMMDD - Title format' });
+    manifest.skippedFolders.push({ name: folderName, reason: 'Does not match YYYYMMDD or YYYYMMDD - Title format' });
     return;
-  }
-
-  let scanPath = await findEditedFolder(folderPath);
-  const scanSource = scanPath ? 'edited-subfolder' : 'album-folder';
-
-  if (!scanPath) {
-    scanPath = folderPath;
   }
 
   let images;
   try {
-    images = await collectImages(scanPath);
+    images = await collectImages(folderPath);
   } catch (err) {
-    manifest.errors.push({ path: scanPath, error: `Failed to scan: ${err.message}` });
+    manifest.errors.push({ path: folderPath, error: `Failed to scan: ${err.message}` });
     return;
   }
 
   if (images.length === 0) {
-    const reason = scanSource === 'edited-subfolder'
-      ? `Edited folder is empty (source: ${path.basename(scanPath)})`
-      : 'Album folder contains no images';
-    manifest.skippedFolders.push({ name: folderName, reason });
+    manifest.skippedFolders.push({ name: folderName, reason: 'Album folder contains no images' });
     return;
   }
 
@@ -116,7 +101,7 @@ async function scanAlbumFolder(folderName, folderPath, manifest) {
   manifest.albums.push({
     folderName,
     ...parsed,
-    editedFolderPath: scanPath,
+    editedFolderPath: folderPath,
     photos: imagesWithSize,
     photoCount: imagesWithSize.length,
     totalSize: imagesWithSize.reduce((sum, i) => sum + i.fileSize, 0),
@@ -137,23 +122,6 @@ export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
 
   const rootFolderName = path.basename(rootDir);
 
-  // Check if rootDir itself is an album folder (YYYYMMDD - Title)
-  if (parseAlbumFolder(rootFolderName)) {
-    await scanAlbumFolder(rootFolderName, rootDir, manifest);
-    return manifest;
-  }
-
-  // Check if rootDir is an edited subfolder (e.g. "調整後 JPG") — use parent as album
-  const editedNamesLower = config.editedFolderNames.map(n => n.trim().toLowerCase());
-  if (editedNamesLower.includes(rootFolderName.trim().toLowerCase())) {
-    const parentDir = path.dirname(rootDir);
-    const parentName = path.basename(parentDir);
-    if (parseAlbumFolder(parentName)) {
-      await scanAlbumFolder(parentName, parentDir, manifest);
-      return manifest;
-    }
-  }
-
   let rootEntries;
   try {
     rootEntries = await fs.readdir(rootDir, { withFileTypes: true });
@@ -162,9 +130,18 @@ export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
     return manifest;
   }
 
-  const albumFolders = rootEntries.filter(e => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  const childFolders = rootEntries.filter(e => e.isDirectory());
+  const hasChildAlbumFolders = childFolders.some(e => parseAlbumFolder(e.name));
 
-  for (const folder of albumFolders) {
+  // If any child folder matches the album pattern, treat rootDir as a container.
+  // Otherwise, if rootDir's own name matches, treat rootDir itself as a single album.
+  if (!hasChildAlbumFolders && parseAlbumFolder(rootFolderName)) {
+    await scanAlbumFolder(rootFolderName, rootDir, manifest);
+    return manifest;
+  }
+
+  const sortedChildren = childFolders.sort((a, b) => a.name.localeCompare(b.name));
+  for (const folder of sortedChildren) {
     const folderPath = path.join(rootDir, folder.name);
     await scanAlbumFolder(folder.name, folderPath, manifest);
   }

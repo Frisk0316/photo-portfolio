@@ -276,7 +276,7 @@ export const upload = {
       headers: {
         'Content-Type': contentType,
         'Authorization': `Bearer ${token}`,
-        'X-Upload-Key': key,
+        'X-Upload-Key': encodeURIComponent(key),
       },
       body,
     });

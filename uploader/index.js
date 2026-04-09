@@ -1,9 +1,30 @@
 #!/usr/bin/env node
+import fs from 'fs';
 import { scanPhotosDirectory, printManifest } from './scanner.js';
 import { processImage, classifyAspectRatio } from './processor.js';
 import { uploadImageVariants } from './uploader.js';
 import { initializeSchema, findOrCreateAlbum, insertPhoto, updateAlbumStats, getExistingPhotos, closeDb } from './db.js';
 import { config } from './config.js';
+
+// Diagnostic: log the last photo that was started, so after a silent native
+// crash we can identify which file killed the process.
+let lastStartedPhoto = null;
+process.on('exit', (code) => {
+  console.log(`\n[EXIT] code=${code} lastStarted=${lastStartedPhoto || 'none'}`);
+});
+process.on('beforeExit', (code) => {
+  console.log(`[BEFORE_EXIT] code=${code} lastStarted=${lastStartedPhoto || 'none'}`);
+});
+process.on('uncaughtException', (err, origin) => {
+  console.error(`\n[UNCAUGHT_EXCEPTION] origin=${origin} lastStarted=${lastStartedPhoto}\n`, err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error(`\n[UNHANDLED_REJECTION] lastStarted=${lastStartedPhoto}\n`, reason);
+});
+process.on('warning', (w) => console.warn(`[WARN] ${w.name}: ${w.message}`));
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGABRT', 'SIGSEGV']) {
+  try { process.on(sig, () => console.error(`\n[SIGNAL] ${sig} lastStarted=${lastStartedPhoto}`)); } catch {}
+}
 
 const args = process.argv.slice(2);
 const flags = {
@@ -134,10 +155,14 @@ async function main() {
 
     await processWithConcurrency(album.photos, config.concurrency, async (photo) => {
       if (!flags.force && existingPhotos.has(photo.fileName)) { progress.photoComplete(photo.fileName, 'skipped'); return; }
+      lastStartedPhoto = `${album.folderName}/${photo.fileName} (size=${photo.fileSize})`;
+      fs.appendFileSync('upload-trace.log', `[${new Date().toISOString()}] START ${lastStartedPhoto}\n`);
       try {
         await processAndUploadPhoto(album.slug, photo, albumId);
+        fs.appendFileSync('upload-trace.log', `[${new Date().toISOString()}] OK    ${photo.fileName}\n`);
         progress.photoComplete(photo.fileName, 'uploaded');
       } catch (err) {
+        fs.appendFileSync('upload-trace.log', `[${new Date().toISOString()}] FAIL  ${photo.fileName}: ${err.message}\n`);
         progress.addError(album.folderName, photo.fileName, err);
         progress.photoComplete(photo.fileName, 'failed', err.message || String(err));
       }

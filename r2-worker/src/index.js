@@ -37,10 +37,11 @@ export default {
     }
 
     // Get the R2 key from header
-    const key = request.headers.get('X-Upload-Key');
-    if (!key) {
+    const rawKey = request.headers.get('X-Upload-Key');
+    if (!rawKey) {
       return corsJson({ error: 'Missing X-Upload-Key header' }, 400, corsOrigin);
     }
+    const key = decodeURIComponent(rawKey);
 
     // Stream the body directly to R2 (no buffering in Worker memory)
     try {

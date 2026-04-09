@@ -1,20 +1,29 @@
+import fs from 'fs/promises';
 import sharp from 'sharp';
 import { encode } from 'blurhash';
 import { config } from './config.js';
 
+// Disable libvips cache and limit internal threads to prevent memory accumulation
+// over large batch uploads.
+sharp.cache(false);
+sharp.concurrency(1);
+sharp.simd(false);
+
 export async function processImage(imagePath) {
-  const image = sharp(imagePath);
-  const metadata = await image.metadata();
+  // Read the file once into a Buffer. Passing a Buffer to sharp avoids
+  // libvips re-opening and re-decoding the JPEG for every variant — which
+  // was triggering native crashes on Windows for large batches.
+  const fileBuffer = await fs.readFile(imagePath);
+
+  const metadata = await sharp(fileBuffer).metadata();
   const { width, height } = metadata;
   const aspectRatio = width / height;
 
-  const [original, thumbnail, medium, webpFull, blurHash] = await Promise.all([
-    sharp(imagePath).jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer(),
-    sharp(imagePath).resize({ height: config.thumbnailHeight, withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true }).toBuffer(),
-    sharp(imagePath).resize({ width: config.mediumWidth, withoutEnlargement: true }).jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer(),
-    sharp(imagePath).resize({ width: config.mediumWidth, withoutEnlargement: true }).webp({ quality: config.webpQuality }).toBuffer(),
-    generateBlurHash(imagePath),
-  ]);
+  const original = await sharp(fileBuffer).jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer();
+  const thumbnail = await sharp(fileBuffer).resize({ height: config.thumbnailHeight, withoutEnlargement: true }).jpeg({ quality: 80, mozjpeg: true }).toBuffer();
+  const medium = await sharp(fileBuffer).resize({ width: config.mediumWidth, withoutEnlargement: true }).jpeg({ quality: config.jpegQuality, mozjpeg: true }).toBuffer();
+  const webpFull = await sharp(fileBuffer).resize({ width: config.mediumWidth, withoutEnlargement: true }).webp({ quality: config.webpQuality }).toBuffer();
+  const blurHash = await generateBlurHash(fileBuffer);
 
   const thumbMeta = await sharp(thumbnail).metadata();
   const mediumMeta = await sharp(medium).metadata();
@@ -33,9 +42,9 @@ export async function processImage(imagePath) {
   };
 }
 
-async function generateBlurHash(imagePath) {
+async function generateBlurHash(source) {
   try {
-    const { data, info } = await sharp(imagePath).resize(32, 32, { fit: 'inside' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { data, info } = await sharp(source).resize(32, 32, { fit: 'inside' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     return encode(new Uint8ClampedArray(data), info.width, info.height, 4, 3);
   } catch {
     return null;
