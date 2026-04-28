@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: photo-portfolio-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: corepack enable && pnpm install --prod --frozen-lockfile
+    startCommand: pnpm start:deploy
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: "production"
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: "admin"
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_URL
+        sync: false
+      - key: R2_WORKER_URL
+        sync: false
+      - key: R2_WORKER_SECRET
+        sync: false
+      - key: THUMBNAIL_HEIGHT
+        value: "400"
+      - key: MEDIUM_WIDTH
+        value: "1600"
+      - key: WEBP_QUALITY
+        value: "82"
+      - key: JPEG_QUALITY
+        value: "85"

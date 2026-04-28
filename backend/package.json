@@ -2,9 +2,15 @@
   "name": "backend",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "nodemon --watch . --ext js,json index.js",
     "start": "node index.js",
+    "start:deploy": "node migrate.js && node index.js",
+    "hash-password": "node scripts/hash-password.js",
     "migrate": "node migrate.js"
   },
   "dependencies": {

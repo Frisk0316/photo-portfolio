@@ -75,6 +75,6 @@ photo-portfolio/
 ## Deployment
 
 - **Frontend** → Vercel (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_R2_PUBLIC_URL`)
-- **Backend** → Railway (all env vars from `.env.example`)
+- **Backend** → Render or Zeabur (see `docs/backend-deployment.md`)
 - **Database** → Neon (set `DATABASE_URL`)
 - **Storage** → Cloudflare R2 (set R2_* vars)

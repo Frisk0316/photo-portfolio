@@ -1,0 +1,5 @@
+{
+  "app_dir": "backend",
+  "build_command": "corepack enable && pnpm install --prod --frozen-lockfile",
+  "start_command": "pnpm start:deploy"
+}
