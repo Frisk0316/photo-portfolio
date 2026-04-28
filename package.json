@@ -1,5 +1,14 @@
 {
   "name": "photo-portfolio",
   "private": true,
-  "workspaces": ["frontend", "backend", "uploader", "shared"]
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": "20.x"
+  },
+  "workspaces": ["frontend", "backend", "uploader", "shared"],
+  "scripts": {
+    "start": "pnpm --dir backend start:deploy",
+    "railway:build": "pnpm --dir backend install --prod --frozen-lockfile --ignore-workspace",
+    "railway:start": "pnpm --dir backend start:deploy"
+  }
 }
