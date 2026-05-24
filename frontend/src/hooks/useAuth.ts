@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { isAuthenticated, clearToken } from '@/lib/api';
+import { auth, isAuthenticated } from '@/lib/api';
 
 export function useAuth(redirectIfUnauth = true) {
   const [authed, setAuthed] = useState(false);
@@ -10,16 +10,20 @@ export function useAuth(redirectIfUnauth = true) {
   const router = useRouter();
 
   useEffect(() => {
-    const ok = isAuthenticated();
-    setAuthed(ok);
-    setLoading(false);
-    if (!ok && redirectIfUnauth) {
-      router.replace('/admin/login');
-    }
+    let mounted = true;
+    isAuthenticated().then((ok) => {
+      if (!mounted) return;
+      setAuthed(ok);
+      setLoading(false);
+      if (!ok && redirectIfUnauth) {
+        router.replace('/admin/login');
+      }
+    });
+    return () => { mounted = false; };
   }, [router, redirectIfUnauth]);
 
-  const logout = () => {
-    clearToken();
+  const logout = async () => {
+    await auth.logout().catch(() => {});
     router.replace('/admin/login');
   };
 

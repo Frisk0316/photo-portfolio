@@ -17,6 +17,10 @@ import homepageRoutes from './routes/homepage.js';
 
 const app = express();
 
+if (config.nodeEnv === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Security headers
 app.use(helmet());
 
@@ -31,6 +35,7 @@ app.use(cors({
     }
     callback(null, false);
   },
+  credentials: true,
 }));
 
 // Global rate limit: 200 requests per 15 minutes per IP
@@ -43,7 +48,7 @@ const globalLimiter = rateLimit({
 app.use('/api/serve', serveRoutes); // before rate limiter — images need higher throughput
 app.use('/api', globalLimiter);
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
 
 // Routes
 app.use('/api/auth', authRoutes);

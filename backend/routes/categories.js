@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import pool from '../services/db.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdminMutation } from '../middleware/auth.js';
 import { safeError } from '../utils/safeError.js';
 
 const router = Router();
@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/categories
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAdminMutation, async (req, res) => {
   try {
     const { name, description, sort_order = 0, section = 'other' } = req.body;
     let slug = slugify(name);
@@ -48,7 +48,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // PUT /api/categories/reorder
-router.put('/reorder', requireAuth, async (req, res) => {
+router.put('/reorder', requireAdminMutation, async (req, res) => {
   const { items } = req.body; // [{ id, sort_order }]
   const client = await pool.connect();
   try {
@@ -67,7 +67,7 @@ router.put('/reorder', requireAuth, async (req, res) => {
 });
 
 // PUT /api/categories/:id
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAdminMutation, async (req, res) => {
   try {
     const { name, description, sort_order, section } = req.body;
     const slug = name ? slugify(name) : undefined;
@@ -89,7 +89,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/categories/:id
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAdminMutation, async (req, res) => {
   try {
     await pool.query('DELETE FROM categories WHERE id = $1', [req.params.id]);
     res.json({ data: { success: true } });

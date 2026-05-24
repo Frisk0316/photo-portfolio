@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 .env.production
+.wrangler/
+.claude/
+upload-trace.log
 
 # Dependencies
 node_modules/

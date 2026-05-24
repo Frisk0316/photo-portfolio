@@ -106,6 +106,8 @@ async function processAndUploadPhoto(albumSlug, photo, albumId, retries = 2) {
         width: processed.meta.originalWidth, height: processed.meta.originalHeight,
         blurHash: processed.meta.blurHash, urlOriginal: urls.original.url,
         urlThumbnail: urls.thumbnail.url, urlMedium: urls.medium.url, urlWebp: urls.webp.url,
+        keyOriginal: urls.original.key, keyThumbnail: urls.thumbnail.key,
+        keyMedium: urls.medium.key, keyWebp: urls.webp.key,
         fileSize: processed.original.size, sortOrder: photo.sortOrder,
       });
       return 'uploaded';

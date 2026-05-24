@@ -1,18 +1,17 @@
-// Cloudflare Worker — proxies browser uploads to R2 via native binding.
-// Auth: verifies the admin JWT token using the shared JWT_SECRET.
+// Cloudflare Worker: streams browser uploads to R2 after validating a short-lived
+// prefix-scoped upload token issued by the backend.
 
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
-    const allowed = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim());
+    const allowed = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
     const corsOrigin = allowed.includes(origin) ? origin : '';
 
-    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': corsOrigin,
+          ...(corsOrigin ? { 'Access-Control-Allow-Origin': corsOrigin } : {}),
           'Access-Control-Allow-Methods': 'PUT',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Upload-Key',
           'Access-Control-Max-Age': '86400',
@@ -24,35 +23,47 @@ export default {
       return corsJson({ error: 'Method not allowed' }, 405, corsOrigin);
     }
 
-    // Verify auth: accept either admin JWT (browser) or shared secret (backend)
     const authHeader = request.headers.get('Authorization') || '';
     if (!authHeader.startsWith('Bearer ')) {
-      return corsJson({ error: 'Missing token' }, 401, corsOrigin);
+      return corsJson({ error: 'Missing upload token' }, 401, corsOrigin);
     }
+
     const token = authHeader.slice(7);
-    const isServerSecret = env.WORKER_SECRET && token === env.WORKER_SECRET;
-    const isValidJwt = !isServerSecret && await verifyJwt(token, env.JWT_SECRET);
-    if (!isServerSecret && !isValidJwt) {
-      return corsJson({ error: 'Invalid token' }, 401, corsOrigin);
+    const payload = await verifyJwt(token, env.UPLOAD_TOKEN_SECRET || env.R2_WORKER_SECRET || env.WORKER_SECRET);
+    if (!payload || payload.purpose !== 'r2-upload' || typeof payload.allowedPrefix !== 'string') {
+      return corsJson({ error: 'Invalid upload token' }, 401, corsOrigin);
     }
 
-    // Get the R2 key from header
     const rawKey = request.headers.get('X-Upload-Key');
-    if (!rawKey) {
-      return corsJson({ error: 'Missing X-Upload-Key header' }, 400, corsOrigin);
-    }
+    if (!rawKey) return corsJson({ error: 'Missing X-Upload-Key header' }, 400, corsOrigin);
     const key = decodeURIComponent(rawKey);
+    if (!isSafeKey(key, payload.allowedPrefix)) {
+      return corsJson({ error: 'Invalid upload key' }, 400, corsOrigin);
+    }
 
-    // Stream the body directly to R2 (no buffering in Worker memory)
+    const contentType = request.headers.get('Content-Type') || '';
+    if (!isAllowedContentType(contentType, key)) {
+      return corsJson({ error: 'Invalid content type' }, 400, corsOrigin);
+    }
+
+    const maxBytes = Number(payload.maxBytes || env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
+    const contentLength = Number(request.headers.get('Content-Length') || 0);
+    if (!contentLength) {
+      return corsJson({ error: 'Missing content length' }, 411, corsOrigin);
+    }
+    if (contentLength && contentLength > maxBytes) {
+      return corsJson({ error: 'Upload too large' }, 413, corsOrigin);
+    }
+
     try {
       await env.PHOTOS_BUCKET.put(key, request.body, {
         httpMetadata: {
-          contentType: request.headers.get('Content-Type') || 'image/jpeg',
+          contentType,
           cacheControl: 'public, max-age=31536000, immutable',
         },
       });
       return corsJson({ success: true, key }, 200, corsOrigin);
-    } catch (err) {
+    } catch {
       return corsJson({ error: 'Upload failed' }, 500, corsOrigin);
     }
   },
@@ -68,11 +79,13 @@ function corsJson(data, status, origin) {
   });
 }
 
-// Verify HS256 JWT using Web Crypto API (available in Workers)
 async function verifyJwt(token, secret) {
   try {
+    if (!secret) return null;
     const parts = token.split('.');
-    if (parts.length !== 3) return false;
+    if (parts.length !== 3) return null;
+    const header = JSON.parse(base64UrlDecodeToString(parts[0]));
+    if (header.alg !== 'HS256') return null;
 
     const key = await crypto.subtle.importKey(
       'raw',
@@ -82,22 +95,34 @@ async function verifyJwt(token, secret) {
       ['verify']
     );
 
-    const data = new TextEncoder().encode(parts[0] + '.' + parts[1]);
+    const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
     const signature = base64UrlDecode(parts[2]);
-
     const valid = await crypto.subtle.verify('HMAC', key, signature, data);
-    if (!valid) return false;
+    if (!valid) return null;
 
-    // Check expiry
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return false;
-    }
-
-    return true;
+    const payload = JSON.parse(base64UrlDecodeToString(parts[1]));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isSafeKey(key, allowedPrefix) {
+  if (!key.startsWith(`${allowedPrefix}/`)) return false;
+  if (key.startsWith('/') || key.includes('..') || key.includes('\\')) return false;
+  const rest = key.slice(allowedPrefix.length + 1);
+  const parts = rest.split('/');
+  if (parts.length !== 2) return false;
+  const [variant, fileName] = parts;
+  if (!['original', 'thumbnail', 'small', 'medium', 'webp'].includes(variant)) return false;
+  const expectedExtension = variant === 'webp' ? 'webp' : 'jpe?g';
+  return new RegExp(`^[A-Za-z0-9._-]+\\.(?:${expectedExtension})$`, 'i').test(fileName);
+}
+
+function isAllowedContentType(contentType, key) {
+  if (key.endsWith('.webp')) return contentType === 'image/webp';
+  return contentType === 'image/jpeg';
 }
 
 function base64UrlDecode(str) {
@@ -110,4 +135,11 @@ function base64UrlDecode(str) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+function base64UrlDecodeToString(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = str.length % 4;
+  if (pad) str += '='.repeat(4 - pad);
+  return atob(str);
 }

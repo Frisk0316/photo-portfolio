@@ -1,39 +1,50 @@
 import { Router } from 'express';
 import pool from '../services/db.js';
-import { requireAuth } from '../middleware/auth.js';
+import { getAdminSession, requireAdminMutation } from '../middleware/auth.js';
 import { safeError } from '../utils/safeError.js';
+import { serveUrl } from '../utils/photoDto.js';
 
 const router = Router();
 
 // GET /api/homepage-featured?section=events|other
 router.get('/', async (req, res) => {
   try {
+    const isAdmin = !!getAdminSession(req);
     const { section } = req.query;
     const params = [];
-    let whereClause = '';
+    const conditions = [];
     if (section) {
       params.push(section);
-      whereClause = `WHERE hf.section = $1`;
+      conditions.push(`hf.section = $${params.length}`);
     }
+    if (!isAdmin) {
+      conditions.push('a.is_published = true');
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await pool.query(`
       SELECT hf.id, hf.section, hf.sort_order,
         a.id as album_id, a.title, a.title_en, a.slug, a.shot_date,
         a.photo_count, a.cover_crop_data, a.cover_aspect_ratio,
-        COALESCE(p.url_medium, p.url_small, p.url_thumbnail) as cover_url
+        p.id as cover_photo_id
       FROM homepage_featured hf
       JOIN albums a ON hf.album_id = a.id
       LEFT JOIN photos p ON a.cover_photo_id = p.id
       ${whereClause}
       ORDER BY hf.section, hf.sort_order ASC
     `, params);
-    res.json({ data: result.rows });
+    res.json({
+      data: result.rows.map(row => ({
+        ...row,
+        cover_url: row.cover_photo_id ? serveUrl(row.cover_photo_id, 'medium', isAdmin) : null,
+      })),
+    });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
 });
 
 // POST /api/homepage-featured  { section, album_id }
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAdminMutation, async (req, res) => {
   try {
     const { section, album_id } = req.body;
     if (!section || !album_id) {
@@ -57,7 +68,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/homepage-featured/:id
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAdminMutation, async (req, res) => {
   try {
     await pool.query('DELETE FROM homepage_featured WHERE id = $1', [req.params.id]);
     res.json({ data: { success: true } });
@@ -67,7 +78,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 });
 
 // PUT /api/homepage-featured/reorder  { items: [{id, sort_order}] }
-router.put('/reorder', requireAuth, async (req, res) => {
+router.put('/reorder', requireAdminMutation, async (req, res) => {
   const { items } = req.body;
   const client = await pool.connect();
   try {

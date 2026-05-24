@@ -45,7 +45,6 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className={`${playfair.variable} ${dmSans.variable} ${dmMono.variable} ${dancingScript.variable}`}>
       <head>
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_R2_PUBLIC_URL || ''} />
       </head>
       <body className="font-sans bg-[var(--bg-primary)] text-[var(--text-primary)] antialiased">
         <I18nProvider>{children}</I18nProvider>

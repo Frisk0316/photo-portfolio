@@ -3,6 +3,7 @@ import Link from 'next/link';
 import JustifiedGallery from '@/components/gallery/JustifiedGallery';
 import Footer from '@/components/layout/Footer';
 import { formatDate } from '@/lib/utils';
+import { safeJsonLd } from '@/lib/safe-json';
 
 function getApiUrl() {
   const url = process.env.BACKEND_URL;
@@ -87,7 +88,7 @@ export default async function EventAlbumPage({ params }: { params: { slug: strin
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: safeJsonLd({
               '@context': 'https://schema.org',
               '@type': 'ImageGallery',
               name: album.title,

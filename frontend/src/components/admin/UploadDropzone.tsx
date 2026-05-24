@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { upload as uploadApi } from '@/lib/api';
 import { processImage, classifyAspectRatio } from '@/lib/image-processor';
 import type { Photo } from '@/lib/api';
@@ -25,12 +25,6 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [workerUrl, setWorkerUrl] = useState<string | null>(null);
-
-  // Fetch worker URL once on mount
-  useEffect(() => {
-    uploadApi.getWorkerUrl().then(({ data }) => setWorkerUrl(data.workerUrl)).catch(() => {});
-  }, []);
 
   const addFiles = useCallback((incoming: File[]) => {
     const jpgs = incoming.filter((f) => /\.(jpe?g)$/i.test(f.name) && f.type === 'image/jpeg');
@@ -59,11 +53,21 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
 
   async function uploadAll() {
     const pending = files.filter((f) => f.status === 'pending');
-    if (!pending.length || !workerUrl) return;
+    if (!pending.length) return;
     setUploading(true);
 
     const results: Photo[] = [];
-    const publicBaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
+    let workerUrl = '';
+    let uploadToken = '';
+    let allowedPrefix = '';
+    try {
+      const tokenData = await uploadApi.getToken(albumId);
+      ({ workerUrl, uploadToken, allowedPrefix } = tokenData.data);
+    } catch {
+      setUploading(false);
+      pending.forEach(item => updateFile(item.file, { status: 'error', error: 'Upload is not configured' }));
+      return;
+    }
 
     for (const item of pending) {
       try {
@@ -74,8 +78,8 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
         // Step 2: Upload all variants to R2 via Worker
         updateFile(item.file, { status: 'uploading', progress: 15, statusText: 'Uploading...' });
 
-        const baseName = item.file.name.replace(/\.[^.]+$/, '');
-        const prefix = `albums/${albumSlug}`;
+        const baseName = safeFileBaseName(item.file.name);
+        const prefix = allowedPrefix || `albums/${albumSlug}`;
         const keys = {
           original: `${prefix}/original/${baseName}.jpg`,
           thumbnail: `${prefix}/thumbnail/${baseName}.jpg`,
@@ -85,15 +89,15 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
         };
 
         // Upload original (largest file)
-        await uploadApi.putToWorker(workerUrl, keys.original, processed.original, 'image/jpeg');
+        await uploadApi.putToWorker(workerUrl, uploadToken, keys.original, processed.original, 'image/jpeg');
         updateFile(item.file, { progress: 35 });
 
         // Upload variants in parallel
         await Promise.all([
-          uploadApi.putToWorker(workerUrl, keys.thumbnail, processed.thumbnail, 'image/jpeg'),
-          uploadApi.putToWorker(workerUrl, keys.small, processed.small, 'image/jpeg'),
-          uploadApi.putToWorker(workerUrl, keys.medium, processed.medium, 'image/jpeg'),
-          uploadApi.putToWorker(workerUrl, keys.webp, processed.webp, 'image/webp'),
+          uploadApi.putToWorker(workerUrl, uploadToken, keys.thumbnail, processed.thumbnail, 'image/jpeg'),
+          uploadApi.putToWorker(workerUrl, uploadToken, keys.small, processed.small, 'image/jpeg'),
+          uploadApi.putToWorker(workerUrl, uploadToken, keys.medium, processed.medium, 'image/jpeg'),
+          uploadApi.putToWorker(workerUrl, uploadToken, keys.webp, processed.webp, 'image/webp'),
         ]);
         updateFile(item.file, { progress: 80, statusText: 'Saving...' });
 
@@ -106,11 +110,7 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
           aspectRatio: processed.meta.aspectRatio,
           aspectCategory: classifyAspectRatio(processed.meta.originalWidth, processed.meta.originalHeight),
           blurHash: processed.meta.blurHash,
-          urlOriginal: `${publicBaseUrl}/${keys.original}`,
-          urlThumbnail: `${publicBaseUrl}/${keys.thumbnail}`,
-          urlSmall: `${publicBaseUrl}/${keys.small}`,
-          urlMedium: `${publicBaseUrl}/${keys.medium}`,
-          urlWebp: `${publicBaseUrl}/${keys.webp}`,
+          keys,
           fileSize: processed.meta.fileSize,
         });
 
@@ -194,7 +194,7 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
       {pendingCount > 0 && (
         <button
           onClick={uploadAll}
-          disabled={uploading || !workerUrl}
+          disabled={uploading}
           className="px-5 py-2.5 rounded text-sm font-medium"
           style={{ background: 'var(--accent)', color: '#0a0a0a' }}
         >
@@ -203,4 +203,16 @@ export default function UploadDropzone({ albumId, albumSlug, onComplete }: Uploa
       )}
     </div>
   );
+}
+
+function safeFileBaseName(fileName: string) {
+  const raw = fileName.replace(/\.[^.]+$/, '');
+  const safe = raw
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'photo';
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) hash = ((hash << 5) - hash + raw.charCodeAt(i)) >>> 0;
+  return `${safe}_${hash.toString(36)}`;
 }

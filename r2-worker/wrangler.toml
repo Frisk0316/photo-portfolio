@@ -8,3 +8,4 @@ bucket_name = "ospreayphoto"
 
 [vars]
 ALLOWED_ORIGINS = "https://ospreay-photo.com,https://www.ospreay-photo.com,http://localhost:3000"
+MAX_UPLOAD_BYTES = "26214400"

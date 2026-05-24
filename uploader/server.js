@@ -3,6 +3,7 @@ import express from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import { scanPhotosDirectory, printManifest, parseAlbumFolder } from './scanner.js';
 import { processImage, classifyAspectRatio } from './processor.js';
 import { uploadImageVariants } from './uploader.js';
@@ -12,6 +13,73 @@ import { config } from './config.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json());
+const guiToken = crypto.randomBytes(32).toString('hex');
+const PORT = Number(process.env.UPLOADER_PORT || 4100);
+const LOCAL_ORIGINS = new Set([
+  `http://127.0.0.1:${PORT}`,
+  `http://localhost:${PORT}`,
+]);
+
+function safeUploaderError(err) {
+  if (err?.statusCode && err.statusCode < 500) return err.message;
+  if (err?.code) return `Error: ${err.code}`;
+  return 'Internal server error';
+}
+
+function isAllowedHost(req) {
+  const host = String(req.headers.host || '').toLowerCase();
+  return host === `127.0.0.1:${PORT}` || host === `localhost:${PORT}`;
+}
+
+function isAllowedLocalNavigation(req) {
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  if (origin) return LOCAL_ORIGINS.has(origin);
+  if (referer) {
+    try {
+      const url = new URL(referer);
+      return LOCAL_ORIGINS.has(url.origin);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function allowedRoots() {
+  return config.allowedRoots.map(root => path.resolve(root));
+}
+
+function resolveAllowedPath(inputPath) {
+  const normalized = path.resolve(inputPath || config.photosRootDir);
+  const allowed = allowedRoots().some(root => {
+    const relative = path.relative(root, normalized);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  });
+  if (!allowed) {
+    const err = new Error('Path is outside the uploader allowlist');
+    err.statusCode = 403;
+    throw err;
+  }
+  return normalized;
+}
+
+app.use((req, res, next) => {
+  if (!isAllowedHost(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !isAllowedLocalNavigation(req)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.headers['x-uploader-token'] !== guiToken) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+});
 
 // ── State ──
 let currentUpload = null; // { abort, progress }
@@ -36,8 +104,9 @@ app.put('/api/config', async (req, res) => {
     let content = await fs.readFile(envPath, 'utf-8');
     const { photosRootDir, concurrency } = req.body;
     if (photosRootDir !== undefined) {
-      content = content.replace(/^PHOTOS_ROOT_DIR=.*/m, `PHOTOS_ROOT_DIR=${photosRootDir}`);
-      config.photosRootDir = photosRootDir;
+      const allowedRoot = resolveAllowedPath(photosRootDir);
+      content = content.replace(/^PHOTOS_ROOT_DIR=.*/m, `PHOTOS_ROOT_DIR=${allowedRoot}`);
+      config.photosRootDir = allowedRoot;
     }
     if (concurrency !== undefined) {
       content = content.replace(/^UPLOAD_CONCURRENCY=.*/m, `UPLOAD_CONCURRENCY=${concurrency}`);
@@ -46,7 +115,8 @@ app.put('/api/config', async (req, res) => {
     await fs.writeFile(envPath, content, 'utf-8');
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[uploader/config] error:', err.message);
+    res.status(err.statusCode || 500).json({ error: safeUploaderError(err) });
   }
 });
 
@@ -54,7 +124,7 @@ app.put('/api/config', async (req, res) => {
 app.post('/api/browse', async (req, res) => {
   try {
     const { dir } = req.body;
-    const target = dir || config.photosRootDir;
+    const target = resolveAllowedPath(dir || config.photosRootDir);
     const entries = await fs.readdir(target, { withFileTypes: true });
     const folders = entries
       .filter(e => e.isDirectory())
@@ -65,9 +135,16 @@ app.post('/api/browse', async (req, res) => {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     const parent = path.dirname(target);
-    res.json({ current: target, parent: parent !== target ? parent : null, folders });
+    let safeParent = null;
+    try {
+      safeParent = parent !== target ? resolveAllowedPath(parent) : null;
+    } catch {
+      safeParent = null;
+    }
+    res.json({ current: target, parent: safeParent, folders });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[uploader/browse] error:', err.message);
+    res.status(err.statusCode || 500).json({ error: safeUploaderError(err) });
   }
 });
 
@@ -80,7 +157,7 @@ app.post('/api/scan', async (req, res) => {
 
     const allAlbums = [], allSkipped = [], allErrors = [];
     for (const dir of dirs) {
-      const m = await scanPhotosDirectory(dir);
+      const m = await scanPhotosDirectory(resolveAllowedPath(dir));
       allAlbums.push(...m.albums);
       allSkipped.push(...m.skippedFolders);
       allErrors.push(...m.errors);
@@ -91,7 +168,8 @@ app.post('/api/scan', async (req, res) => {
     const totalPhotos = albums.reduce((s, a) => s + a.photoCount, 0);
     res.json({ data: { scannedAt: new Date().toISOString(), albums, totalPhotos, skippedFolders: allSkipped, errors: allErrors } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[uploader/scan] error:', err.message);
+    res.status(err.statusCode || 500).json({ error: safeUploaderError(err) });
   }
 });
 
@@ -122,7 +200,7 @@ app.post('/api/upload', async (req, res) => {
 
     const allAlbums = [];
     for (const dir of dirs) {
-      const m = await scanPhotosDirectory(dir);
+      const m = await scanPhotosDirectory(resolveAllowedPath(dir));
       allAlbums.push(...m.albums);
     }
     // Deduplicate by slug
@@ -188,6 +266,8 @@ app.post('/api/upload', async (req, res) => {
             width: processed.meta.originalWidth, height: processed.meta.originalHeight,
             blurHash: processed.meta.blurHash, urlOriginal: urls.original.url,
             urlThumbnail: urls.thumbnail.url, urlMedium: urls.medium.url, urlWebp: urls.webp.url,
+            keyOriginal: urls.original.key, keyThumbnail: urls.thumbnail.key,
+            keyMedium: urls.medium.key, keyWebp: urls.webp.key,
             fileSize: processed.original.size, sortOrder: photo.sortOrder,
           });
 
@@ -195,7 +275,7 @@ app.post('/api/upload', async (req, res) => {
           send('photo', { albumIndex: ai, photoIndex: pi, global: globalPhoto, totalPhotos, fileName: photo.fileName, status: 'done', uploaded, skipped, failed, elapsed: ((Date.now() - startTime) / 1000).toFixed(0), eta });
         } catch (err) {
           failed++;
-          send('photo', { albumIndex: ai, photoIndex: pi, global: globalPhoto, totalPhotos, fileName: photo.fileName, status: 'error', error: err.message, uploaded, skipped, failed, elapsed, eta });
+          send('photo', { albumIndex: ai, photoIndex: pi, global: globalPhoto, totalPhotos, fileName: photo.fileName, status: 'error', error: safeUploaderError(err), uploaded, skipped, failed, elapsed, eta });
         }
       }
 
@@ -207,7 +287,7 @@ app.post('/api/upload', async (req, res) => {
     send('complete', { uploaded, skipped, failed, elapsed: ((Date.now() - startTime) / 1000).toFixed(1) });
   } catch (err) {
     console.error('[upload] ERROR:', err);
-    send('error', { message: err.message });
+    send('error', { message: safeUploaderError(err) });
   }
 
   res.end();
@@ -215,14 +295,17 @@ app.post('/api/upload', async (req, res) => {
 
 // ── Serve GUI ──
 app.get('/', (req, res) => {
+  if (req.query.t !== guiToken) {
+    return res.status(403).send('Forbidden');
+  }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(HTML);
 });
 
-const PORT = 4100;
-app.listen(PORT, () => {
+app.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  Photo Uploader GUI`);
-  console.log(`  http://localhost:${PORT}\n`);
+  console.log(`  http://127.0.0.1:${PORT}/?t=${guiToken}`);
+  console.log('');
 });
 
 // ── Embedded HTML ──
@@ -360,6 +443,23 @@ const HTML = /*html*/ `<!DOCTYPE html>
 </div>
 
 <script>
+const params = new URLSearchParams(window.location.search);
+const tokenFromQuery = params.get('t');
+if (tokenFromQuery) {
+  sessionStorage.setItem('uploader_token', tokenFromQuery);
+  window.history.replaceState(null, '', window.location.pathname);
+}
+const UPLOADER_TOKEN = sessionStorage.getItem('uploader_token') || '';
+function apiFetch(url, options = {}) {
+  if (!UPLOADER_TOKEN) throw new Error('Uploader session is missing');
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      'X-Uploader-Token': UPLOADER_TOKEN,
+    },
+  });
+}
 let albums = [];
 let scanData = null;
 let rootDirs = [''];
@@ -391,7 +491,7 @@ function removeRootDir(i) {
 }
 
 async function loadConfig() {
-  const r = await fetch('/api/config').then(r => r.json());
+  const r = await apiFetch('/api/config').then(r => r.json());
   rootDirs = [r.photosRootDir];
   renderRootDirs();
   document.getElementById('concurrency').value = r.concurrency;
@@ -399,7 +499,7 @@ async function loadConfig() {
 
 async function saveConfig() {
   const concurrency = parseInt(document.getElementById('concurrency').value) || 4;
-  await fetch('/api/config', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ photosRootDir: rootDirs[0] || '', concurrency }) });
+  await apiFetch('/api/config', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ photosRootDir: rootDirs[0] || '', concurrency }) });
   toast('Settings saved');
 }
 
@@ -420,7 +520,7 @@ function toggleBrowser() {
 
 async function browse(dir) {
   try {
-    const r = await fetch('/api/browse', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ dir }) }).then(r => r.json());
+    const r = await apiFetch('/api/browse', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ dir }) }).then(r => r.json());
     if (r.error) { toast(r.error, true); return; }
     let html = '';
     if (r.parent) html += '<div class="browser-item browser-parent" onclick="browse(\\''+esc(r.parent)+'\\')">.. (parent)</div>';
@@ -447,7 +547,7 @@ async function scan() {
   try {
     const dirs = rootDirs.filter(d => d.trim());
     if (!dirs.length) { toast('請先設定資料夾路徑', true); btn.disabled = false; btn.textContent = 'Scan'; return; }
-    const r = await fetch('/api/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rootDirs: dirs }) }).then(r => r.json());
+    const r = await apiFetch('/api/scan', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rootDirs: dirs }) }).then(r => r.json());
     scanData = r.data;
     albums = scanData.albums.map(a => ({ ...a, selected: true }));
     renderAlbums();
@@ -498,7 +598,7 @@ async function startUpload() {
   const dirs = rootDirs.filter(d => d.trim());
   const force = document.getElementById('forceUpload').checked;
 
-  const res = await fetch('/api/upload', {
+  const res = await apiFetch('/api/upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rootDirs: dirs, albums: selected, force }),

@@ -1,0 +1,8 @@
+.env
+.env.*
+.git
+.wrangler
+.claude
+node_modules
+*.log
+upload-trace.log

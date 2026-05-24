@@ -140,7 +140,7 @@ export async function scanPhotosDirectory(rootDir = config.photosRootDir) {
     return manifest;
   }
 
-  const sortedChildren = childFolders.sort((a, b) => a.name.localeCompare(b.name));
+  const sortedChildren = childFolders.sort((a, b) => b.name.localeCompare(a.name));
   for (const folder of sortedChildren) {
     const folderPath = path.join(rootDir, folder.name);
     await scanAlbumFolder(folder.name, folderPath, manifest);

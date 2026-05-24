@@ -34,6 +34,7 @@ export const config = {
   },
   databaseUrl: required('DATABASE_URL'),
   photosRootDir: required('PHOTOS_ROOT_DIR'),
+  allowedRoots: csvList('UPLOADER_ALLOWED_ROOTS', process.env.PHOTOS_ROOT_DIR || ''),
   editedFolderNames: csvList('EDITED_FOLDER_NAMES', '調整後 JPG,調整後JPG,Edited JPG,edited'),
   skipFolderNames: csvList('SKIP_FOLDER_NAMES', '原始 JPG,原始JPG,Raw JPG,raw'),
   skipExtensions: csvList('SKIP_EXTENSIONS', '.arw,.nef,.cr2,.cr3,.raf,.orf,.rw2,.dng'),

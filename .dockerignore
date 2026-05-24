@@ -1,0 +1,13 @@
+.env
+.env.*
+**/.env
+**/.env.*
+.git
+.wrangler
+.claude
+node_modules
+**/node_modules
+*.log
+upload-trace.log
+frontend/.next
+frontend/out

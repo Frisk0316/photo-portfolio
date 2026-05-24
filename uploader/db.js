@@ -37,7 +37,8 @@ export async function initializeSchema() {
       id SERIAL PRIMARY KEY, album_id INTEGER NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
       file_name VARCHAR(500) NOT NULL, caption TEXT, group_tag VARCHAR(200),
       aspect_ratio REAL, aspect_category VARCHAR(20), width INTEGER, height INTEGER,
-      blur_hash VARCHAR(100), url_original TEXT, url_thumbnail TEXT, url_medium TEXT, url_webp TEXT,
+      blur_hash VARCHAR(100), url_original TEXT, url_thumbnail TEXT, url_small TEXT, url_medium TEXT, url_webp TEXT,
+      key_original TEXT, key_thumbnail TEXT, key_small TEXT, key_medium TEXT, key_webp TEXT,
       file_size INTEGER, sort_order INTEGER DEFAULT 0, exif_data JSONB, created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE (album_id, file_name)
     );
@@ -65,11 +66,15 @@ export async function insertPhoto(photoData) {
   const db = getPool();
   const result = await db.query(
     `INSERT INTO photos (album_id, file_name, group_tag, aspect_ratio, aspect_category, width, height, blur_hash,
-      url_original, url_thumbnail, url_medium, url_webp, file_size, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (album_id, file_name) DO NOTHING RETURNING id`,
+      url_original, url_thumbnail, url_small, url_medium, url_webp,
+      key_original, key_thumbnail, key_small, key_medium, key_webp,
+      file_size, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT (album_id, file_name) DO NOTHING RETURNING id`,
     [photoData.albumId, photoData.fileName, photoData.groupTag, photoData.aspectRatio, photoData.aspectCategory,
      photoData.width, photoData.height, photoData.blurHash, photoData.urlOriginal, photoData.urlThumbnail,
-     photoData.urlMedium, photoData.urlWebp, photoData.fileSize, photoData.sortOrder]
+     photoData.urlSmall || null, photoData.urlMedium, photoData.urlWebp, photoData.keyOriginal, photoData.keyThumbnail,
+     photoData.keySmall || null,
+     photoData.keyMedium, photoData.keyWebp, photoData.fileSize, photoData.sortOrder]
   );
   return result.rows[0]?.id || null;
 }

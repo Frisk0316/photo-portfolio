@@ -1,26 +1,33 @@
 import { Router } from 'express';
 import pool from '../services/db.js';
 import { deleteFromR2 } from '../services/r2.js';
-import { requireAuth } from '../middleware/auth.js';
+import { getAdminSession, requireAdminMutation } from '../middleware/auth.js';
 import { safeError } from '../utils/safeError.js';
+import { sanitizePhoto, sanitizePhotos } from '../utils/photoDto.js';
+import { keyForVariant } from '../utils/r2Keys.js';
 
 const router = Router();
 
 // GET /api/albums/:albumId/photos
 router.get('/albums/:albumId/photos', async (req, res) => {
   try {
+    const isAdmin = !!getAdminSession(req);
     const result = await pool.query(
-      'SELECT * FROM photos WHERE album_id = $1 ORDER BY sort_order',
-      [req.params.albumId]
+      `SELECT p.*
+       FROM photos p
+       JOIN albums a ON a.id = p.album_id
+       WHERE p.album_id = $1 AND ($2::boolean OR a.is_published = true)
+       ORDER BY p.sort_order`,
+      [req.params.albumId, isAdmin]
     );
-    res.json({ data: result.rows });
+    res.json({ data: sanitizePhotos(result.rows, { admin: isAdmin }) });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
 });
 
 // PUT /api/albums/:albumId/photos/reorder
-router.put('/albums/:albumId/photos/reorder', requireAuth, async (req, res) => {
+router.put('/albums/:albumId/photos/reorder', requireAdminMutation, async (req, res) => {
   const { items } = req.body; // [{ id, sort_order }]
   const client = await pool.connect();
   try {
@@ -39,7 +46,7 @@ router.put('/albums/:albumId/photos/reorder', requireAuth, async (req, res) => {
 });
 
 // PUT /api/photos/:id
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAdminMutation, async (req, res) => {
   try {
     const { caption, group_tag } = req.body;
     const result = await pool.query(
@@ -47,7 +54,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       [caption, group_tag, req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    res.json({ data: result.rows[0] });
+    res.json({ data: sanitizePhoto(result.rows[0], { admin: true }) });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
@@ -59,11 +66,15 @@ async function deletePhotoAndR2(photoId) {
   const photo = result.rows[0];
 
   // Extract keys from URLs and delete from R2
-  const urlsToDelete = [photo.url_original, photo.url_thumbnail, photo.url_medium, photo.url_webp].filter(Boolean);
-  for (const url of urlsToDelete) {
+  const keysToDelete = [
+    keyForVariant(photo, 'original'),
+    keyForVariant(photo, 'thumbnail'),
+    keyForVariant(photo, 'small'),
+    keyForVariant(photo, 'medium'),
+    keyForVariant(photo, 'webp'),
+  ].filter(Boolean);
+  for (const key of keysToDelete) {
     try {
-      // Extract key from URL: everything after the bucket/domain
-      const key = url.split('/').slice(3).join('/');
       if (key) await deleteFromR2(key);
     } catch {
       // Continue even if R2 delete fails
@@ -73,7 +84,7 @@ async function deletePhotoAndR2(photoId) {
 }
 
 // DELETE /api/photos/:id
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAdminMutation, async (req, res) => {
   try {
     await deletePhotoAndR2(req.params.id);
     res.json({ data: { success: true } });
@@ -83,7 +94,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 });
 
 // POST /api/photos/bulk-delete
-router.post('/bulk-delete', requireAuth, async (req, res) => {
+router.post('/bulk-delete', requireAdminMutation, async (req, res) => {
   try {
     const { ids } = req.body; // array of photo IDs
     for (const id of ids) {

@@ -43,7 +43,14 @@ export async function fileExistsInR2(key) {
 }
 
 export async function uploadImageVariants(albumSlug, fileName, processed) {
-  const baseName = fileName.replace(/\.[^.]+$/, '');
+  const rawBaseName = fileName.replace(/\.[^.]+$/, '');
+  const safeName = rawBaseName
+    .replace(/[^A-Za-z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'photo';
+  let hash = 0;
+  for (let i = 0; i < rawBaseName.length; i++) hash = ((hash << 5) - hash + rawBaseName.charCodeAt(i)) >>> 0;
+  const baseName = `${safeName}_${hash.toString(36)}`;
   const prefix = `albums/${albumSlug}`;
   const uploads = await Promise.all([
     uploadToR2(`${prefix}/original/${baseName}.jpg`, processed.original.buffer, 'image/jpeg', { variant: 'original' }),

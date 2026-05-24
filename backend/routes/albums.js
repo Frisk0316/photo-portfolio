@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
 import pool from '../services/db.js';
-import { requireAuth } from '../middleware/auth.js';
-import { config } from '../config.js';
+import { getAdminSession, requireAdminMutation } from '../middleware/auth.js';
 import { safeError } from '../utils/safeError.js';
 import { clearAlbumServeCache } from './serve.js';
+import { sanitizeAlbum, sanitizeAlbums, sanitizePhotos } from '../utils/photoDto.js';
 
 const router = Router();
 
@@ -21,18 +20,7 @@ function slugify(text) {
 // GET /api/albums
 router.get('/', async (req, res) => {
   try {
-    let isAdmin = false;
-    if (req.query.all === 'true') {
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith('Bearer ')) {
-        try {
-          jwt.verify(authHeader.slice(7), config.jwtSecret);
-          isAdmin = true;
-        } catch (err) {
-          console.warn(`[AUTH] Invalid JWT on album listing | ip=${req.ip || 'unknown'} error=${err.message}`);
-        }
-      }
-    }
+    const isAdmin = req.query.all === 'true' && !!getAdminSession(req);
     const conditions = [];
     const params = [];
     if (!isAdmin) {
@@ -51,14 +39,14 @@ router.get('/', async (req, res) => {
     }
     const result = await pool.query(`
       SELECT a.*, c.name as category_name, c.section as category_section,
-        COALESCE(p.url_medium, p.url_small, p.url_thumbnail) as cover_url
+        p.id as cover_photo_id
       FROM albums a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN photos p ON a.cover_photo_id = p.id
       ${whereClause}
       ${orderClause}
     `, params);
-    res.json({ data: result.rows });
+    res.json({ data: sanitizeAlbums(result.rows, { admin: isAdmin }) });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
@@ -67,11 +55,13 @@ router.get('/', async (req, res) => {
 // GET /api/albums/:slug
 router.get('/:slug', async (req, res) => {
   try {
+    const isAdmin = !!getAdminSession(req);
+    const publishClause = isAdmin ? '' : 'AND a.is_published = true';
     const albumResult = await pool.query(`
       SELECT a.*, c.name as category_name, c.section as category_section
       FROM albums a
       LEFT JOIN categories c ON a.category_id = c.id
-      WHERE a.slug = $1
+      WHERE a.slug = $1 ${publishClause}
     `, [req.params.slug]);
     if (albumResult.rows.length === 0) return res.status(404).json({ error: 'Not found' });
     const album = albumResult.rows[0];
@@ -80,14 +70,19 @@ router.get('/:slug', async (req, res) => {
       'SELECT * FROM photos WHERE album_id = $1 ORDER BY sort_order',
       [album.id]
     );
-    res.json({ data: { ...album, photos: photosResult.rows } });
+    res.json({
+      data: {
+        ...sanitizeAlbum(album, { admin: isAdmin }),
+        photos: sanitizePhotos(photosResult.rows, { admin: isAdmin }),
+      },
+    });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
 });
 
 // POST /api/albums
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAdminMutation, async (req, res) => {
   try {
     const { title, description, category_id, shot_date, folder_name, sort_order = 0, title_en, description_en } = req.body;
     const slug = slugify(title);
@@ -100,7 +95,7 @@ router.post('/', requireAuth, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [title, slug, description, category_id, shot_date, folder_name, sort_order, title_en || null, description_en || null]
     );
-    res.status(201).json({ data: result.rows[0] });
+    res.status(201).json({ data: sanitizeAlbum(result.rows[0], { admin: true }) });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: '已有相同的相簿名稱' });
     res.status(500).json({ error: safeError(err) });
@@ -108,7 +103,7 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 // PUT /api/albums/bulk-publish — set all draft albums to published
-router.put('/bulk-publish', requireAuth, async (req, res) => {
+router.put('/bulk-publish', requireAdminMutation, async (req, res) => {
   try {
     const result = await pool.query(
       'UPDATE albums SET is_published = true, updated_at = NOW() WHERE is_published = false RETURNING id'
@@ -120,7 +115,7 @@ router.put('/bulk-publish', requireAuth, async (req, res) => {
 });
 
 // PUT /api/albums/bulk-archive — set all published albums to draft
-router.put('/bulk-archive', requireAuth, async (req, res) => {
+router.put('/bulk-archive', requireAdminMutation, async (req, res) => {
   try {
     const result = await pool.query(
       'UPDATE albums SET is_published = false, updated_at = NOW() WHERE is_published = true RETURNING id'
@@ -132,7 +127,7 @@ router.put('/bulk-archive', requireAuth, async (req, res) => {
 });
 
 // PUT /api/albums/reorder
-router.put('/reorder', requireAuth, async (req, res) => {
+router.put('/reorder', requireAdminMutation, async (req, res) => {
   const { items } = req.body;
   const client = await pool.connect();
   try {
@@ -151,7 +146,7 @@ router.put('/reorder', requireAuth, async (req, res) => {
 });
 
 // PUT /api/albums/:id
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAdminMutation, async (req, res) => {
   try {
     const { title, description, category_id, shot_date, is_published, cover_photo_id, cover_crop_data, sort_order, title_en, description_en, cover_aspect_ratio } = req.body;
     const slug = title ? slugify(title) : undefined;
@@ -178,14 +173,14 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (is_published !== undefined) {
       await clearAlbumServeCache(req.params.id);
     }
-    res.json({ data: result.rows[0] });
+    res.json({ data: sanitizeAlbum(result.rows[0], { admin: true }) });
   } catch (err) {
     res.status(500).json({ error: safeError(err) });
   }
 });
 
 // DELETE /api/albums/:id
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAdminMutation, async (req, res) => {
   try {
     await pool.query('DELETE FROM albums WHERE id = $1', [req.params.id]);
     res.json({ data: { success: true } });

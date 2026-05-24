@@ -16,6 +16,16 @@ function int(key, fallback) {
   return val ? parseInt(val, 10) : fallback;
 }
 
+function bool(key, fallback = false) {
+  const val = process.env[key];
+  if (val === undefined) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(val.toLowerCase());
+}
+
+function csv(key, fallback = '') {
+  return optional(key, fallback).split(',').map(s => s.trim()).filter(Boolean);
+}
+
 export const config = {
   port: int('PORT', 4000),
   nodeEnv: optional('NODE_ENV', 'development'),
@@ -31,6 +41,8 @@ export const config = {
     publicUrl: optional('R2_PUBLIC_URL', ''),
     workerUrl: optional('R2_WORKER_URL', ''),
     workerSecret: optional('R2_WORKER_SECRET', ''),
+    maxUploadBytes: int('R2_MAX_UPLOAD_BYTES', 25 * 1024 * 1024),
+    uploadTokenTtlSeconds: int('R2_UPLOAD_TOKEN_TTL_SECONDS', 15 * 60),
     get endpoint() {
       return `https://${this.accountId}.r2.cloudflarestorage.com`;
     },
@@ -39,7 +51,10 @@ export const config = {
   mediumWidth: int('MEDIUM_WIDTH', 1600),
   webpQuality: int('WEBP_QUALITY', 82),
   jpegQuality: int('JPEG_QUALITY', 85),
-  allowedOrigins: optional('ALLOWED_ORIGINS', '').split(',').map(s => s.trim()).filter(Boolean),
+  allowedOrigins: csv('ALLOWED_ORIGINS'),
+  enableServerBatchUpload: bool('ENABLE_SERVER_BATCH_UPLOAD', false),
+  batchUploadRoots: csv('BATCH_UPLOAD_ROOTS'),
+  editedFolderNames: csv('EDITED_FOLDER_NAMES', '調整後 JPG,調整後JPG,Edited JPG,edited'),
   smtp: {
     host: optional('SMTP_HOST', ''),
     port: int('SMTP_PORT', 587),
@@ -52,10 +67,17 @@ export const config = {
 
 // Startup security warnings
 if (config.jwtSecret === 'change-this-to-a-random-string') {
-  console.warn('[SECURITY] JWT_SECRET is still the default placeholder — generate a strong secret with: openssl rand -hex 32');
+  const message = '[SECURITY] JWT_SECRET is still the default placeholder - generate a strong secret with: openssl rand -hex 32';
+  if (config.nodeEnv === 'production') throw new Error(message);
+  console.warn(message);
 }
 if (!config.adminPasswordHash.startsWith('$2')) {
-  console.warn('[SECURITY] ADMIN_PASSWORD_HASH does not look like a valid bcrypt hash — run the hash generation script');
+  const message = '[SECURITY] ADMIN_PASSWORD_HASH does not look like a valid bcrypt hash - run the hash generation script';
+  if (config.nodeEnv === 'production') throw new Error(message);
+  console.warn(message);
+}
+if (config.nodeEnv === 'production' && (!config.r2.workerSecret || config.r2.workerSecret === config.jwtSecret)) {
+  throw new Error('[SECURITY] R2_WORKER_SECRET must be set and must differ from JWT_SECRET in production');
 }
 if (!config.allowedOrigins.length) {
   console.warn('[SECURITY] ALLOWED_ORIGINS is empty — CORS will reject all cross-origin requests');

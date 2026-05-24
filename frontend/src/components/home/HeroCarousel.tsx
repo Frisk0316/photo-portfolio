@@ -116,7 +116,7 @@ export default function HeroCarousel() {
             style={{ opacity: i === current && !transitioning ? 1 : 0 }}
           >
             <img
-              src={image.url_medium || image.url_original}
+              src={image.url_medium || image.url_original || ''}
               alt={image.album_title}
               className="w-full h-full object-cover"
               style={cropStyle(activeCrop)}

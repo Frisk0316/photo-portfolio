@@ -2,45 +2,55 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === 'l
   ? 'http://localhost:4000'
   : '';
 
+const CSRF_STORAGE_KEY = 'admin_csrf';
 
 // Watermarked image proxy URL
 export function watermarkedUrl(photoId: number, variant: 'thumb' | 'medium'): string {
   return `${API_URL}/api/serve/${photoId}/${variant}`;
 }
 
-function getToken(): string | null {
+function getCsrfToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('admin_token');
+  return sessionStorage.getItem(CSRF_STORAGE_KEY);
 }
 
-export function setToken(token: string) {
-  localStorage.setItem('admin_token', token);
+export function setCsrfToken(token: string) {
+  sessionStorage.setItem(CSRF_STORAGE_KEY, token);
 }
 
-export function clearToken() {
-  localStorage.removeItem('admin_token');
+export function clearCsrfToken() {
+  sessionStorage.removeItem(CSRF_STORAGE_KEY);
 }
 
-export function isAuthenticated(): boolean {
-  return !!getToken();
+export async function isAuthenticated(): Promise<boolean> {
+  try {
+    const result = await auth.session();
+    setCsrfToken(result.data.csrfToken);
+    return result.data.authenticated;
+  } catch {
+    clearCsrfToken();
+    return false;
+  }
 }
 
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
+  const method = (options.method || 'GET').toUpperCase();
+  const csrfToken = getCsrfToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && csrfToken && path !== '/api/auth/login') {
+    headers['X-CSRF-Token'] = csrfToken;
   }
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   if (!res.ok) {
@@ -54,10 +64,25 @@ async function request<T>(
 // Auth
 export const auth = {
   login: (username: string, password: string) =>
-    request<{ data: { token: string } }>('/api/auth/login', {
+    request<{ data: { authenticated: boolean; csrfToken: string } }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),
+  session: () =>
+    request<{ data: { authenticated: boolean; csrfToken: string } }>('/api/auth/session'),
+  logout: async () => {
+    try {
+      return await request<{ data: { authenticated: boolean } }>('/api/auth/logout', { method: 'POST' });
+    } catch {
+      await fetch(`${API_URL}/api/auth/logout-redirect`, {
+        credentials: 'include',
+        redirect: 'manual',
+      }).catch(() => undefined);
+      return { data: { authenticated: false } };
+    } finally {
+      clearCsrfToken();
+    }
+  },
 };
 
 // Categories
@@ -120,7 +145,7 @@ export interface Photo {
   width: number;
   height: number;
   blur_hash: string | null;
-  url_original: string;
+  url_original: string | null;
   url_thumbnail: string;
   url_small: string | null;
   url_medium: string;
@@ -197,7 +222,7 @@ export interface HeroImage {
   crop_desktop: HeroCropData | null;
   crop_mobile: HeroCropData | null;
   url_medium: string;
-  url_original: string;
+  url_original: string | null;
   blur_hash: string | null;
   width: number;
   height: number;
@@ -269,13 +294,17 @@ export const download = {
 export const upload = {
   getWorkerUrl: () =>
     request<{ data: { workerUrl: string } }>('/api/upload/worker-url'),
-  putToWorker: async (workerUrl: string, key: string, body: Blob | File, contentType: string) => {
-    const token = getToken();
+  getToken: (albumId: number) =>
+    request<{ data: { workerUrl: string; uploadToken: string; allowedPrefix: string; expiresAt: string } }>('/api/upload/token', {
+      method: 'POST',
+      body: JSON.stringify({ albumId }),
+    }),
+  putToWorker: async (workerUrl: string, uploadToken: string, key: string, body: Blob | File, contentType: string) => {
     const res = await fetch(workerUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': contentType,
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${uploadToken}`,
         'X-Upload-Key': encodeURIComponent(key),
       },
       body,
@@ -294,11 +323,13 @@ export const upload = {
     aspectRatio: number;
     aspectCategory: string;
     blurHash: string | null;
-    urlOriginal: string;
-    urlThumbnail: string;
-    urlSmall: string;
-    urlMedium: string;
-    urlWebp: string;
+    keys: {
+      original: string;
+      thumbnail: string;
+      small: string;
+      medium: string;
+      webp: string;
+    };
     fileSize: number;
     sortOrder?: number;
   }) =>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, setToken, isAuthenticated } from '@/lib/api';
+import { auth, setCsrfToken, isAuthenticated } from '@/lib/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 export default function LoginPage() {
@@ -13,7 +13,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated()) router.replace('/admin');
+    isAuthenticated().then((ok) => {
+      if (ok) router.replace('/admin');
+    });
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -22,7 +24,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await auth.login(username, password);
-      setToken(result.data.token);
+      setCsrfToken(result.data.csrfToken);
       router.replace('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');

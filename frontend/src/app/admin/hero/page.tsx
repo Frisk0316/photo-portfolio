@@ -11,27 +11,13 @@ import { CSS } from '@dnd-kit/utilities';
 import { heroImages, albums } from '@/lib/api';
 import type { HeroImage, HeroCropData, Album, Photo } from '@/lib/api';
 
-const API_URL = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-  ? 'http://localhost:4000'
-  : '';
-
 const DEFAULT_CROP: HeroCropData = { offsetX: 0, offsetY: 0, zoom: 1 };
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 
-function getToken() {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('admin_token');
-}
-
 async function getAlbumPhotos(slug: string): Promise<Photo[]> {
-  const token = getToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}/api/albums/${slug}`, { headers });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data?.photos || [];
+  const result = await albums.get(slug).catch(() => null);
+  return result?.data?.photos || [];
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -123,7 +109,7 @@ function CropEditorModal({ img, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (updated: HeroImage) => void;
 }) {
-  const src = img.url_medium || img.url_original;
+  const src = img.url_medium || img.url_original || '';
   const isDesktop = img.device !== 'mobile'; // default to desktop if device is missing
 
   // For desktop images, only show desktop crop; for mobile, only mobile crop
@@ -237,7 +223,7 @@ function SortableHeroCard({ img, index, onRemove, onEdit, selectMode, selected, 
           style={{ outline: selected ? '2px solid var(--accent)' : '2px solid transparent' }}
           onClick={() => onToggleSelect(img.id)}
         >
-          <img src={img.url_medium || img.url_original} alt={img.album_title}
+          <img src={img.url_medium || img.url_original || ''} alt={img.album_title}
             className="w-36 h-24 object-cover" draggable={false} />
         </div>
       ) : (
@@ -245,7 +231,7 @@ function SortableHeroCard({ img, index, onRemove, onEdit, selectMode, selected, 
           <div {...attributes} {...listeners}
             className="cursor-grab active:cursor-grabbing rounded overflow-hidden"
             style={{ outline: isDragging ? '2px solid var(--accent)' : 'none' }}>
-            <img src={img.url_medium || img.url_original} alt={img.album_title}
+            <img src={img.url_medium || img.url_original || ''} alt={img.album_title}
               className="w-36 h-24 object-cover" draggable={false} />
           </div>
           <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">

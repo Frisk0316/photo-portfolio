@@ -17,19 +17,22 @@ const API_URL = typeof window !== 'undefined' && window.location.hostname === 'l
   ? 'http://localhost:4000'
   : '';
 
-function getToken() {
+function getCsrfToken() {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('admin_token');
+  return sessionStorage.getItem('admin_csrf');
 }
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
+  const csrfToken = getCsrfToken();
+  const method = (options.method || 'GET').toUpperCase();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `HTTP ${res.status}`);
