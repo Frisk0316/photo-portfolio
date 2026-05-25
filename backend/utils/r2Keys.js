@@ -12,10 +12,16 @@ export function isSafeObjectKey(key) {
   const parts = key.split('/');
   if (parts.length !== 4) return false;
   const [, albumSlug, variant, fileName] = parts;
-  if (!/^[A-Za-z0-9._-]+$/.test(albumSlug)) return false;
+  if (!isSafeObjectSegment(albumSlug) || !isSafeObjectSegment(fileName)) return false;
   if (!['original', 'thumbnail', 'small', 'medium', 'webp'].includes(variant)) return false;
   const expectedExtension = variant === 'webp' ? 'webp' : 'jpe?g';
-  return new RegExp(`^[A-Za-z0-9._-]+\\.(?:${expectedExtension})$`, 'i').test(fileName);
+  return new RegExp(`\\.(?:${expectedExtension})$`, 'i').test(fileName);
+}
+
+function isSafeObjectSegment(segment) {
+  if (!segment || typeof segment !== 'string') return false;
+  if (segment === '.' || segment === '..') return false;
+  return !segment.includes('/') && !segment.includes('\\') && !segment.includes('\0');
 }
 
 export function keyForVariant(photo, variant) {
