@@ -46,11 +46,14 @@ cd uploader
 pnpm gui                  # starts on :4100
 ```
 
-Open <http://localhost:4100> — provides a web interface for:
+Open the tokenized URL printed in the terminal, for example
+`http://127.0.0.1:4100/?t=...`. The GUI provides:
 
 - Editing upload settings (root directory, concurrency)
-- Browsing and selecting album folders visually
-- Scanning and uploading with real-time progress bar and ETA
+- Browsing local source directories
+- Listing album subfolders with parsed date/title
+- Selecting only the folders you want to upload
+- Scanning selected folders and uploading with real-time progress bar and ETA
 
 ## Structure
 

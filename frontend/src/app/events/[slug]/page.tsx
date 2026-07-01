@@ -24,12 +24,15 @@ async function getAlbum(slug: string) {
   }
 }
 
+type EventAlbumParams = Promise<{ slug: string }>;
+
 export async function generateMetadata({
   params,
 }: {
-  params: { slug: string };
+  params: EventAlbumParams;
 }): Promise<Metadata> {
-  const album = await getAlbum(params.slug);
+  const { slug } = await params;
+  const album = await getAlbum(slug);
   if (!album) return { title: 'Album not found' };
   return {
     title: `${album.title} — Ospreay Photo`,
@@ -42,8 +45,9 @@ export async function generateMetadata({
   };
 }
 
-export default async function EventAlbumPage({ params }: { params: { slug: string } }) {
-  const album = await getAlbum(params.slug);
+export default async function EventAlbumPage({ params }: { params: EventAlbumParams }) {
+  const { slug } = await params;
+  const album = await getAlbum(slug);
 
   if (!album) {
     return (

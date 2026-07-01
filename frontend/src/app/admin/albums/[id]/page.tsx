@@ -10,13 +10,30 @@ import { albums } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import type { Album, Photo } from '@/lib/api';
 
-export default function EditAlbumPage({ params }: { params: { id: string } }) {
+type EditAlbumParams = Promise<{ id: string }>;
+
+export default function EditAlbumPage({ params }: { params: EditAlbumParams }) {
   const router = useRouter();
-  const albumId = Number(params.id);
+  const [albumId, setAlbumId] = useState<number | null>(null);
   const [album, setAlbum] = useState<(Album & { photos: Photo[] }) | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+    params.then(({ id }) => {
+      if (!active) return;
+      const nextAlbumId = Number(id);
+      if (!Number.isFinite(nextAlbumId)) {
+        router.replace('/admin/albums');
+        return;
+      }
+      setAlbumId(nextAlbumId);
+    });
+    return () => { active = false; };
+  }, [params, router]);
+
+  useEffect(() => {
+    if (albumId === null) return;
     // Fetch by id — we need the slug first so we get from admin endpoint
     albums.list(true).then((r) => {
       const found = r.data.find((a) => a.id === albumId);

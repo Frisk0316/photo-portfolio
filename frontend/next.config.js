@@ -1,3 +1,5 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 function r2RemotePatterns() {
   const value = process.env.NEXT_PUBLIC_R2_PUBLIC_URL;
@@ -53,6 +55,7 @@ function buildCsp() {
 }
 
 const nextConfig = {
+  outputFileTracingRoot: path.resolve(__dirname),
   async headers() {
     return [
       {

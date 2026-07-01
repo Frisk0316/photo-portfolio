@@ -19,8 +19,11 @@ async function getAlbum(slug: string) {
   }
 }
 
-export default async function AlbumRedirectPage({ params }: { params: { slug: string } }) {
-  const album = await getAlbum(params.slug);
+type AlbumRedirectParams = Promise<{ slug: string }>;
+
+export default async function AlbumRedirectPage({ params }: { params: AlbumRedirectParams }) {
+  const { slug } = await params;
+  const album = await getAlbum(slug);
 
   if (!album) {
     redirect('/');
@@ -28,8 +31,8 @@ export default async function AlbumRedirectPage({ params }: { params: { slug: st
 
   const section = album.category_section;
   if (section === 'events') {
-    redirect(`/events/${params.slug}`);
+    redirect(`/events/${slug}`);
   } else {
-    redirect(`/gallery/${params.slug}`);
+    redirect(`/gallery/${slug}`);
   }
 }

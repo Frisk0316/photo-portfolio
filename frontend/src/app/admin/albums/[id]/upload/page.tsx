@@ -7,13 +7,30 @@ import UploadDropzone from '@/components/admin/UploadDropzone';
 import { albums } from '@/lib/api';
 import type { Album, Photo } from '@/lib/api';
 
-export default function UploadPage({ params }: { params: { id: string } }) {
+type UploadPageParams = Promise<{ id: string }>;
+
+export default function UploadPage({ params }: { params: UploadPageParams }) {
   const router = useRouter();
-  const albumId = Number(params.id);
+  const [albumId, setAlbumId] = useState<number | null>(null);
   const [album, setAlbum] = useState<Album | null>(null);
   const [uploadedCount, setUploadedCount] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    params.then(({ id }) => {
+      if (!active) return;
+      const nextAlbumId = Number(id);
+      if (!Number.isFinite(nextAlbumId)) {
+        router.replace('/admin/albums');
+        return;
+      }
+      setAlbumId(nextAlbumId);
+    });
+    return () => { active = false; };
+  }, [params, router]);
+
+  useEffect(() => {
+    if (albumId === null) return;
     albums.list(true).then((r) => {
       const found = r.data.find((a) => a.id === albumId);
       if (!found) router.replace('/admin/albums');
@@ -25,12 +42,14 @@ export default function UploadPage({ params }: { params: { id: string } }) {
     setUploadedCount((c) => c + photos.length);
   }
 
-  if (!album) return <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading…</p>;
+  if (albumId === null || !album) return <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading…</p>;
+
+  const resolvedAlbumId = albumId;
 
   return (
     <div>
       <div className="flex items-center gap-4 mb-8">
-        <Link href={`/admin/albums/${albumId}`} className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+        <Link href={`/admin/albums/${resolvedAlbumId}`} className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
           ← {album.title}
         </Link>
         <h1 className="text-2xl" style={{ fontFamily: 'var(--font-playfair)' }}>Upload Photos</h1>
@@ -43,7 +62,7 @@ export default function UploadPage({ params }: { params: { id: string } }) {
       )}
 
       <UploadDropzone
-        albumId={albumId}
+        albumId={resolvedAlbumId}
         albumSlug={album.slug}
         onComplete={handleComplete}
       />
@@ -51,7 +70,7 @@ export default function UploadPage({ params }: { params: { id: string } }) {
       {uploadedCount > 0 && (
         <div className="mt-6">
           <Link
-            href={`/admin/albums/${albumId}`}
+            href={`/admin/albums/${resolvedAlbumId}`}
             className="px-4 py-2 rounded text-sm"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
           >
